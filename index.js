@@ -12350,6 +12350,7 @@ function loop(callback) {
     }
   };
 }
+const globals = typeof window !== "undefined" ? window : typeof globalThis !== "undefined" ? globalThis : global;
 function append(target2, node) {
   target2.appendChild(node);
 }
@@ -12422,6 +12423,7 @@ function attr(node, attribute, value) {
   else if (node.getAttribute(attribute) !== value)
     node.setAttribute(attribute, value);
 }
+const always_set_through_set_attribute = ["width", "height"];
 function set_attributes(node, attributes) {
   const descriptors = Object.getOwnPropertyDescriptors(node.__proto__);
   for (const key in attributes) {
@@ -12431,7 +12433,7 @@ function set_attributes(node, attributes) {
       node.style.cssText = attributes[key];
     } else if (key === "__value") {
       node.value = node[key] = attributes[key];
-    } else if (descriptors[key] && descriptors[key].set) {
+    } else if (descriptors[key] && descriptors[key].set && always_set_through_set_attribute.indexOf(key) === -1) {
       node[key] = attributes[key];
     } else {
       attr(node, key, attributes[key]);
@@ -12450,11 +12452,11 @@ function set_data(text2, data2) {
     return;
   text2.data = data2;
 }
-function set_input_value(input2, value) {
-  input2.value = value == null ? "" : value;
+function set_input_value(input, value) {
+  input.value = value == null ? "" : value;
 }
 function set_style(node, key, value, important) {
-  if (value === null) {
+  if (value == null) {
     node.style.removeProperty(key);
   } else {
     node.style.setProperty(key, value, important ? "important" : "");
@@ -13048,7 +13050,6 @@ function create_bidirectional_transition(node, fn, params, intro) {
     }
   };
 }
-const globals = typeof window !== "undefined" ? window : typeof globalThis !== "undefined" ? globalThis : global;
 function destroy_block(block, lookup) {
   block.d(1);
   lookup.delete(block.key);
@@ -13166,34 +13167,6 @@ function get_spread_update(levels, updates) {
 function get_spread_object(spread_props) {
   return typeof spread_props === "object" && spread_props !== null ? spread_props : {};
 }
-const _boolean_attributes = [
-  "allowfullscreen",
-  "allowpaymentrequest",
-  "async",
-  "autofocus",
-  "autoplay",
-  "checked",
-  "controls",
-  "default",
-  "defer",
-  "disabled",
-  "formnovalidate",
-  "hidden",
-  "inert",
-  "ismap",
-  "loop",
-  "multiple",
-  "muted",
-  "nomodule",
-  "novalidate",
-  "open",
-  "playsinline",
-  "readonly",
-  "required",
-  "reversed",
-  "selected"
-];
-/* @__PURE__ */ new Set([..._boolean_attributes]);
 function debug(file, line, column, values) {
   console.log(`{@debug} ${file ? file + " " : ""}(${line}:${column})`);
   console.log(values);
@@ -14450,167 +14423,6 @@ function klona(x) {
     }
   }
   return tmp || x;
-}
-function isSpace(character) {
-  return character == " " || character == "\n" || character == "\r" || character == "	";
-}
-function isQuote(character) {
-  return character == '"' || character == "'";
-}
-const TAG_START = "<";
-const TAG_END = ">";
-const ENCODED_TAG_START = "&lt;";
-const ENCODED_TAG_END = "&gt;";
-class InPlaintextState {
-  constructor(options2) {
-    this.options = options2;
-  }
-  consume(character, transition) {
-    if (character == TAG_START) {
-      transition(new InTagNameState(this.options));
-      return "";
-    } else if (character == TAG_END && this.options.encodePlaintextTagDelimiters) {
-      return ENCODED_TAG_END;
-    }
-    return character;
-  }
-}
-class InTagNameState {
-  constructor(options2) {
-    this.options = options2;
-    this.nameBuffer = "";
-    this.isClosingTag = false;
-  }
-  consume(character, transition) {
-    if (this.nameBuffer.length == 0) {
-      if (isSpace(character)) {
-        transition(new InPlaintextState(this.options));
-        return (this.options.encodePlaintextTagDelimiters ? ENCODED_TAG_START : "<") + character;
-      }
-      if (character == "/") {
-        this.isClosingTag = true;
-        return "";
-      }
-    }
-    if (isSpace(character)) {
-      if (this.isNameBufferAnAllowedTag()) {
-        transition(new InTagState(0, this.options));
-        return TAG_START + (this.isClosingTag ? "/" : "") + this.nameBuffer + character;
-      } else {
-        transition(new InTagState(1, this.options));
-        return this.options.tagReplacementText;
-      }
-    }
-    if (character == TAG_START) {
-      this.nameBuffer += ENCODED_TAG_START;
-      return "";
-    }
-    if (character == TAG_END) {
-      transition(new InPlaintextState(this.options));
-      if (this.isNameBufferAnAllowedTag()) {
-        return TAG_START + (this.isClosingTag ? "/" : "") + this.nameBuffer + character;
-      } else {
-        return this.options.tagReplacementText;
-      }
-    }
-    if (character == "-" && this.nameBuffer == "!-") {
-      transition(new InCommentState(this.options));
-      return "";
-    }
-    this.nameBuffer += character;
-    return "";
-  }
-  isNameBufferAnAllowedTag() {
-    const tagName = this.nameBuffer.toLowerCase();
-    if (this.options.allowedTags) {
-      return this.options.allowedTags.has(tagName);
-    } else if (this.options.disallowedTags) {
-      return !this.options.disallowedTags.has(tagName);
-    } else {
-      return false;
-    }
-  }
-}
-class InTagState {
-  constructor(mode, options2) {
-    this.mode = mode;
-    this.options = options2;
-  }
-  consume(character, transition) {
-    if (character == TAG_END) {
-      transition(new InPlaintextState(this.options));
-    } else if (isQuote(character)) {
-      transition(new InQuotedStringInTagState(this.mode, character, this.options));
-    }
-    if (this.mode == 1) {
-      return "";
-    }
-    if (character == TAG_START) {
-      return ENCODED_TAG_START;
-    } else {
-      return character;
-    }
-  }
-}
-class InQuotedStringInTagState {
-  constructor(mode, quoteCharacter, options2) {
-    this.mode = mode;
-    this.quoteCharacter = quoteCharacter;
-    this.options = options2;
-  }
-  consume(character, transition) {
-    if (character == this.quoteCharacter) {
-      transition(new InTagState(this.mode, this.options));
-    }
-    if (this.mode == 1) {
-      return "";
-    }
-    if (character == TAG_START) {
-      return ENCODED_TAG_START;
-    } else if (character == TAG_END) {
-      return ENCODED_TAG_END;
-    } else {
-      return character;
-    }
-  }
-}
-class InCommentState {
-  constructor(options2) {
-    this.options = options2;
-    this.consecutiveHyphens = 0;
-  }
-  consume(character, transition) {
-    if (character == ">" && this.consecutiveHyphens >= 2) {
-      transition(new InPlaintextState(this.options));
-    } else if (character == "-") {
-      this.consecutiveHyphens++;
-    } else {
-      this.consecutiveHyphens = 0;
-    }
-    return "";
-  }
-}
-const DefaultStateMachineOptions = {
-  tagReplacementText: "",
-  encodePlaintextTagDelimiters: true
-};
-class StateMachine {
-  constructor(partialOptions = {}) {
-    this.state = new InPlaintextState(Object.assign(Object.assign({}, DefaultStateMachineOptions), partialOptions));
-    this.transitionFunction = ((next) => {
-      this.state = next;
-    }).bind(this);
-  }
-  consume(text2) {
-    let outputBuffer = "";
-    for (const character of text2) {
-      outputBuffer += this.state.consume(character, this.transitionFunction);
-    }
-    return outputBuffer;
-  }
-}
-function striptags(text2, options2 = {}) {
-  return new StateMachine(options2).consume(text2);
 }
 function getUUIDFromDataTransfer(data2, { actor = true, compendium = true, world = true, types = void 0 } = {}) {
   if (typeof data2 !== "object") {
@@ -16693,7 +16505,7 @@ async function handleItem(data2) {
     return;
   }
   const item2 = data2.item;
-  const itemName = !data2.activeEffect || game.system.id === "pf2e" ? item2.name : item2.label;
+  const itemName = !data2.activeEffect || game.system.id === "pf2e" || game.system.id === "ptu" ? item2.name : item2.label;
   const rinsedItemName = itemName ? AAAutorecFunctions.rinseName(itemName) : "noitem";
   const ammoItem = data2.ammoItem;
   const rinsedAmmoName = ammoItem?.name ? AAAutorecFunctions.rinseName(ammoItem.name) : "";
@@ -16739,19 +16551,20 @@ async function handleItem(data2) {
     if (itemFlags.isCustomized) {
       return itemFlags;
     } else if (!autorecDisabled) {
-      autorecObject = AAAutorecFunctions.allMenuSearch(menus, rinsedItemName, itemName);
-      if (!autorecObject && data2.extraNames?.length && !data2.activeEffect) {
-        for (const name of data2.extraNames) {
-          if (!name) {
-            continue;
-          }
-          const rinsedName = AAAutorecFunctions.rinseName(name);
-          autorecObject = AAAutorecFunctions.allMenuSearch(menus, rinsedName, itemName);
-          if (autorecObject) {
-            data2.rinsedName = rinsedName;
-            break;
-          }
+      const prioritizedNames = [...data2.overrideNames || [], itemName, ...data2.extraNames || []];
+      prioritizedNames.find((name) => {
+        const rinsedName = AAAutorecFunctions.rinseName(name);
+        const found = AAAutorecFunctions.allMenuSearch(menus, rinsedName, name);
+        if (found) {
+          autorecObject = found;
+          data2.rinsedName = rinsedName;
         }
+        return !!found;
+      });
+      if (!autorecObject && data2.isVariant && !data2.isTemplate) {
+        let originalItemName = data2.originalItem?.name;
+        let originalRinsedName = originalItemName ? AAAutorecFunctions.rinseName(originalItemName) : "noitem";
+        autorecObject = AAAutorecFunctions.allMenuSearch(menus, originalRinsedName, originalItemName);
       }
     }
   }
@@ -16761,7 +16574,7 @@ async function handleItem(data2) {
       autorecObject = AAAutorecFunctions.singleMenuSearch(autorecSettings.templatefx, rinsedItemName, itemName);
     }
   } else if (data2.isVariant && !autorecObject && data2.isTemplate && !autorecDisabled) {
-    let newItemName = input.originalItem?.name;
+    let newItemName = data2.originalItem?.name;
     let newRinsedName = newItemName ? AAAutorecFunctions.rinseName(newItemName) : "noitem";
     autorecObject = AAAutorecFunctions.allMenuSearch(menus, newRinsedName, newItemName);
   }
@@ -16868,10 +16681,14 @@ function targetEffect(targetFX, seq, targetArray, missable = false, handler) {
 }
 function macroSection(seq, macro2, handler) {
   let userData = macro2.args;
-  if (game.modules.get("advanced-macros")?.active) {
-    seq.macro(macro2.name, handler.workflow, handler, userData);
+  if (isNewerVersion(game.version, 11)) {
+    seq.macro(macro2.name, { args: [handler.workflow, handler, userData] });
   } else {
-    seq.macro(macro2.name);
+    if (game.modules.get("advanced-macros")?.active) {
+      seq.macro(macro2.name, handler.workflow, handler, userData);
+    } else {
+      seq.macro(macro2.name);
+    }
   }
 }
 let enabled = true;
@@ -17032,10 +16849,14 @@ class AAHandler {
   }
   runMacro(macro2, handler = this) {
     let userData = macro2.args;
-    if (game.modules.get("advanced-macros")?.active) {
-      new Sequence(handler.sequenceData).macro(macro2.name, handler.workflow, handler, userData).play();
+    if (isNewerVersion(game.version, 11)) {
+      new Sequence(handler.sequenceData).macro(macro2.name, { args: [handler.workflow, handler, userData] }).play();
     } else {
-      new Sequence(handler.sequenceData).macro(macro2.name).play();
+      if (game.modules.get("advanced-macros")?.active) {
+        new Sequence(handler.sequenceData).macro(macro2.name, handler.workflow, handler, userData).play();
+      } else {
+        new Sequence(handler.sequenceData).macro(macro2.name).play();
+      }
     }
   }
   compileSourceEffect(sourceFX, seq, handler = this) {
@@ -17242,7 +17063,7 @@ class DataSanitizer {
     }
   }
   static setSound(data2, addDelay = 0, overrideRepeat = false) {
-    const input2 = {
+    const input = {
       enable: data2.enable ?? false,
       file: data2.file,
       delay: data2.delay ?? 0,
@@ -17251,16 +17072,16 @@ class DataSanitizer {
       repeat: overrideRepeat || data2.repeat || 1,
       repeatDelay: data2.repeatDelay ?? 250
     };
-    if (!input2.enable || !input2.file) {
+    if (!input.enable || !input.file) {
       return false;
     }
     let soundSeq = new Sequence({ moduleName: "Automated Animations", softFail: !game.settings.get("autoanimations", "debug") });
     let section2 = soundSeq.sound();
-    section2.file(input2.file);
-    section2.delay(input2.delay + addDelay);
-    section2.startTime(input2.startTime);
-    section2.volume(input2.volume);
-    section2.repeats(input2.repeat, input2.repeatDelay);
+    section2.file(input.file);
+    section2.delay(input.delay + addDelay);
+    section2.startTime(input.startTime);
+    section2.volume(input.volume);
+    section2.repeats(input.repeat, input.repeatDelay);
     return soundSeq;
   }
   static async compilePrimary(flagData, menu, handler) {
@@ -17415,6 +17236,7 @@ class DataSanitizer {
           tintColor: data2.tintColor || "#FFFFFF",
           scaleX: data2.scaleX || 1,
           scaleY: data2.scaleY || 1,
+          xray: data2.xray ?? false,
           zIndex: data2.zIndex || 1
         };
       case "aura":
@@ -17448,12 +17270,12 @@ class DataSanitizer {
         };
     }
   }
-  static convertToXY(input2, isAnchor) {
+  static convertToXY(input, isAnchor) {
     let dNum = isAnchor ? 0.5 : 1;
-    if (!input2) {
+    if (!input) {
       return { x: dNum, y: dNum };
     }
-    let parsedInput = input2.split(",").map((s) => s.trim());
+    let parsedInput = input.split(",").map((s) => s.trim());
     let posX = Number(parsedInput[0]);
     let posY = Number(parsedInput[1]);
     if (parsedInput.length === 2) {
@@ -17958,7 +17780,7 @@ class DataSanitizer {
       return data2;
     }
     function setSound(data2, addDelay = 0) {
-      const input2 = {
+      const input = {
         enable: data2.enable ?? false,
         file: data2.file,
         delay: data2.delay ?? 0,
@@ -17967,16 +17789,16 @@ class DataSanitizer {
         repeat: data2.repeat || 1,
         repeatDelay: data2.repeatDelay ?? 250
       };
-      if (!input2.enable || !input2.file) {
+      if (!input.enable || !input.file) {
         return false;
       }
       let soundSeq = new Sequence();
       let section2 = soundSeq.sound();
-      section2.file(input2.file);
-      section2.delay(input2.delay + addDelay);
-      section2.startTime(input2.startTime);
-      section2.volume(input2.volume);
-      section2.repeats(input2.repeat, input2.repeatDelay);
+      section2.file(input.file);
+      section2.delay(input.delay + addDelay);
+      section2.startTime(input.startTime);
+      section2.volume(input.volume);
+      section2.repeats(input.repeat, input.repeatDelay);
       return soundSeq;
     }
   }
@@ -18835,18 +18657,19 @@ async function templatefx$3(handler, animationData, templateDocument) {
     seq.playbackRate(data2.options.playbackRate);
     seq.name(handler.rinsedName);
     seq.aboveLighting(data2.options.aboveTemplate);
+    seq.xray(data2.options.xray);
     if (data2.options.tint) {
       seq.tint(data2.options.tintColor);
       seq.filter("ColorMatrix", { contrast: data2.options.contrast, saturate: data2.options.saturation });
     }
-    function convertToXY(input2) {
+    function convertToXY(input) {
       let menuType = data2.video.menuType;
       let templateType2 = template.t;
       let defaultAnchor = templateType2 === "circle" || templateType2 === "rect" ? { x: 0.5, y: 0.5 } : { x: 0, y: 0.5 };
-      if (!input2) {
+      if (!input) {
         return defaultAnchor;
       }
-      let dNum = menuType === "cone" || menuType === "ray" ? input2 || "0, 0.5" : input2 || "0.5, 0.5";
+      let dNum = menuType === "cone" || menuType === "ray" ? input || "0, 0.5" : input || "0.5, 0.5";
       let parsedInput = dNum.split(",").map((s) => s.trim());
       let posX = Number(parsedInput[0]);
       let posY = Number(parsedInput[1]);
@@ -19533,7 +19356,6 @@ async function trafficCop$1(handler) {
       switch (game.system.id) {
         case "a5e":
         case "sw5e":
-        case "dnd4e":
         case "tormenta20":
         case "swade":
           aaTemplateHook = Hooks.once("createMeasuredTemplate", async (template) => {
@@ -19583,7 +19405,15 @@ async function trafficCop$1(handler) {
       return;
     }
     if (sanitizedData?.macro && sanitizedData?.macro?.args?.warpgateTemplate) {
-      new Sequence(handler.sequenceData).macro(sanitizedData.macro.name, handler.workflow, handler, sanitizedData.macro.args).play();
+      if (isNewerVersion(game.version, 11)) {
+        new Sequence().macro(sanitizedData.macro.name, { args: [handler.workflow, handler, sanitizedData.macro.args] }).play();
+      } else {
+        if (game.modules.get("advanced-macros")?.active) {
+          new Sequence().macro(sanitizedData.macro.name, handler.workflow, handler, sanitizedData.macro.args).play();
+        } else {
+          new Sequence().macro(sanitizedData.macro.name).play();
+        }
+      }
       aaTemplateHook = Hooks.once("createMeasuredTemplate", async (template) => {
         await wait(500);
         animate[animationType](handler, sanitizedData, template);
@@ -19595,7 +19425,6 @@ async function trafficCop$1(handler) {
       case "a5e":
       case "pf2e":
       case "sw5e":
-      case "dnd4e":
       case "tormenta20":
       case "swade":
         aaTemplateHook = Hooks.once("createMeasuredTemplate", async (template2) => {
@@ -23977,10 +23806,14 @@ async function deleteActiveEffects(effect, shouldDelete = false) {
   const flagData = handler.animationData;
   const macro2 = await DataSanitizer.compileMacro(handler, flagData);
   if (macro2) {
-    if (game.modules.get("advanced-macros")?.active) {
-      new Sequence().macro(macro2.name, "off", handler, macro2.args).play();
+    if (isNewerVersion(game.version, 11)) {
+      new Sequence().macro(macro2.name, { args: ["off", handler, macro2.args] }).play();
     } else {
-      new Sequence().macro(macro2.name).play();
+      if (game.modules.get("advanced-macros")?.active) {
+        new Sequence().macro(macro2.name, "off", handler, macro2.args).play();
+      } else {
+        new Sequence().macro(macro2.name).play();
+      }
     }
   }
   if (shouldDelete) {
@@ -24036,8 +23869,8 @@ async function createRuleElementPF2e(item2) {
   if (!AnimationState.enabled) {
     return;
   }
-  const itemId = item2.id;
-  const aeToken = canvas.tokens.placeables.find((token) => token.actor?.items?.get(itemId) != null);
+  const itemId2 = item2.id;
+  const aeToken = canvas.tokens.placeables.find((token) => token.actor?.items?.get(itemId2) != null);
   if (!aeToken) {
     debug$1("Failed to find the Token for the Active Effect");
     return;
@@ -24091,10 +23924,89 @@ async function deleteRuleElementPF2e(itemData = {}) {
   const flagData = handler.animationData;
   const macro2 = await DataSanitizer.compileMacro(handler, flagData);
   if (macro2) {
-    new Sequence().macro(macro2.name, "off", handler, macro2.args).play();
+    if (isNewerVersion(game.version, 11)) {
+      new Sequence().macro(macro2.name, { args: ["off", handler, macro2.args] }).play();
+    } else {
+      if (game.modules.get("advanced-macros")?.active) {
+        new Sequence().macro(macro2.name, "off", handler, macro2.args).play();
+      } else {
+        new Sequence().macro(macro2.name).play();
+      }
+    }
+  }
+}
+async function createRuleElementPtu(item2) {
+  if (!AnimationState.enabled) {
+    return;
+  }
+  const itemId2 = item2.id;
+  const aeToken = canvas.tokens.placeables.find((token) => token.actor?.items?.get(itemId2) != null);
+  if (!aeToken) {
+    debug$1("Failed to find the Token for the Active Effect");
+    return;
+  }
+  if (game.settings.get("autoanimations", "disableGrantedAuraEffects")) {
+    let tactorId = aeToken.actor.id;
+    let origin = item2.flags?.ptu?.aura?.origin;
+    if (origin) {
+      let idSplit = origin.split(".");
+      let id = idSplit[idSplit.length - 1];
+      if (tactorId !== id) {
+        debug$1("This is a Granted Ruleset, exiting early");
+        return;
+      }
+    }
+  }
+  const aeNameField = item2.name.replace(/[^A-Za-z0-9 .*_-]/g, "") + `${aeToken.id}`;
+  const checkAnim = await Sequencer.EffectManager.getEffects({ object: aeToken, name: aeNameField }).length > 0;
+  if (checkAnim) {
+    debug$1("Animation is already present on the Token, returning.");
+    return;
+  }
+  const data2 = {
+    token: aeToken,
+    targets: [],
+    item: item2,
+    activeEffect: true,
+    tieToDocuments: true
+  };
+  let handler = await AAHandler.make(data2);
+  if (!handler) {
+    return;
+  }
+  if (!handler.item || !handler.sourceToken) {
+    debug$1("Failed to find the Item or Source Token", handler);
+    return;
+  }
+  trafficCop$1(handler);
+}
+async function deleteRuleElementPtu(itemData = {}) {
+  const data2 = {
+    token: itemData.token,
+    targets: [],
+    item: itemData.item,
+    activeEffect: true
+  };
+  const handler = await AAHandler.make(data2);
+  if (!handler) {
+    return;
+  }
+  const flagData = handler.animationData;
+  const macro2 = await DataSanitizer.compileMacro(handler, flagData);
+  if (macro2) {
+    if (isNewerVersion(game.version, 11)) {
+      new Sequence().macro(macro2.name, { args: ["off", handler, macro2.args] }).play();
+    } else {
+      if (game.modules.get("advanced-macros")?.active) {
+        new Sequence().macro(macro2.name, "off", handler, macro2.args).play();
+      } else {
+        new Sequence().macro(macro2.name).play();
+      }
+    }
   }
 }
 const pf2eDeletedItems = /* @__PURE__ */ new Map();
+const ptuDeletedItems = /* @__PURE__ */ new Map();
 function registerActiveEffectHooks() {
   switch (game.system.id) {
     case "pf2e":
@@ -24180,7 +24092,6 @@ function registerActiveEffectHooks() {
         }
         toggleActiveEffects(data2, toggle);
       });
-    case "pf1":
     case "wfrp4e":
       Hooks.on("createActiveEffect", (effect, data2, userId) => {
         if (game.settings.get("autoanimations", "disableAEAnimations")) {
@@ -24202,6 +24113,77 @@ function registerActiveEffectHooks() {
         }
       });
       break;
+    case "pf1":
+      Hooks.on("createActiveEffect", async (effect, data2, userId) => {
+        if (game.settings.get("autoanimations", "disableAEAnimations")) {
+          debug$1(`Active Effect Animations are Disabled`);
+          return;
+        }
+        if (game.user.id !== userId) {
+          return;
+        }
+        const item2 = fromUuidSync(effect.origin);
+        if (item2) {
+          const flagData = fromUuidSync(effect.origin).flags["autoanimations"];
+          if (flagData) {
+            await effect.update({ "flags.autoanimations": flagData });
+          }
+          createActiveEffects(effect);
+        }
+      });
+      Hooks.on("preDeleteActiveEffect", (effect, data2, userId) => {
+        if (game.user.id !== userId) {
+          return;
+        }
+        deleteActiveEffects(effect);
+      });
+      break;
+    case "ptu":
+      let ptuShouldContinue = function(item2, userId) {
+        if (game.user.id !== userId) {
+          return false;
+        }
+        if (!["condition", "effect"].includes(item2.type)) {
+          return false;
+        }
+        return true;
+      };
+      Hooks.on("createItem", (item2, data2, userId) => {
+        if (game.settings.get("autoanimations", "disableAEAnimations")) {
+          debug$1(`Active Effect Animations are Disabled`);
+          return;
+        }
+        if (game.user.id !== userId) {
+          return;
+        }
+        const aePtuTypes = ["condition", "effect"];
+        if (!aePtuTypes.includes(item2.type)) {
+          debug$1("This is not a PTU Ruleset, exiting early");
+          return;
+        }
+        if (item2.system?.references?.parent && game.settings.get("autoanimations", "disableNestedEffects")) {
+          debug$1("This is a nested Ruleset, exiting early");
+          return;
+        }
+        createRuleElementPtu(item2);
+      });
+      Hooks.on("preDeleteItem", (item2, data2, userId) => {
+        if (ptuShouldContinue(item2, userId)) {
+          ptuDeletedItems.set(item2.id, {
+            item: item2,
+            token: item2.parent?.token || canvas.tokens.placeables.find((token) => token.actor?.items?.get(item2.id) != null)
+          });
+        }
+      });
+      Hooks.on("deleteItem", (item2, data2, userId) => {
+        if (ptuShouldContinue(item2, userId)) {
+          let itemData = ptuDeletedItems.get(item2.id);
+          if (!itemData) {
+            return;
+          }
+          deleteRuleElementPtu(itemData);
+        }
+      });
     default:
       Hooks.on("updateActiveEffect", (data2, toggle, other, userId) => {
         if (game.settings.get("autoanimations", "disableAEAnimations")) {
@@ -26170,11 +26152,11 @@ function generator(storage2) {
           return;
         }
         cleanup();
-        const input2 = single ? values[0] : values;
+        const input = single ? values[0] : values;
         if (isSimpleDeriver(fn)) {
-          set2(fn(input2));
+          set2(fn(input));
         } else {
-          const result = fn(input2, set2);
+          const result = fn(input, set2);
           cleanup = is_function(result) ? result : noop;
         }
       };
@@ -26479,7 +26461,7 @@ class EmbeddedStoreManager {
    *
    * @type {RegExp}
    */
-  static #renderContextRegex = /(create|delete|update)(\w+)/;
+  static #renderContextRegex = /(?<action>create|delete|update)(?<sep>\.?)(?<name>\w+)/;
   /**
    * @type {Map<string, EmbeddedCollectionData>}
    */
@@ -26488,6 +26470,10 @@ class EmbeddedStoreManager {
    * @type {foundry.abstract.Document[]}
    */
   #document;
+  /**
+   * @type {Map<string, string>}
+   */
+  #collectionToDocName = /* @__PURE__ */ new Map();
   /**
    * @type {Set<string>}
    */
@@ -26624,20 +26610,26 @@ class EmbeddedStoreManager {
     const doc = this.#document[0];
     if (doc instanceof globalThis.foundry.abstract.Document) {
       const existingEmbeddedNames = new Set(this.#name.keys());
-      const embeddedNames = Object.keys(doc.constructor?.metadata?.embedded ?? []);
+      const embeddedNames = Object.entries(doc.constructor?.metadata?.embedded ?? []);
+      this.#collectionToDocName.clear();
       this.#embeddedNames.clear();
-      for (const embeddedName of embeddedNames) {
-        existingEmbeddedNames.delete(embeddedName);
-        this.#embeddedNames.add(`create${embeddedName}`);
-        this.#embeddedNames.add(`delete${embeddedName}`);
-        this.#embeddedNames.add(`update${embeddedName}`);
+      for (const [docName, collectionName] of embeddedNames) {
+        existingEmbeddedNames.delete(docName);
+        this.#embeddedNames.add(`create${docName}`);
+        this.#embeddedNames.add(`delete${docName}`);
+        this.#embeddedNames.add(`update${docName}`);
+        this.#embeddedNames.add(`create.${collectionName}`);
+        this.#embeddedNames.add(`delete.${collectionName}`);
+        this.#embeddedNames.add(`update.${collectionName}`);
+        this.#collectionToDocName.set(docName, docName);
+        this.#collectionToDocName.set(collectionName, docName);
         let collection = null;
         try {
-          collection = doc.getEmbeddedCollection(embeddedName);
+          collection = doc.getEmbeddedCollection(docName);
         } catch (err) {
-          console.warn(`EmbeddedStoreManager.handleDocUpdate error: No valid embedded collection for: ${embeddedName}`);
+          console.warn(`EmbeddedStoreManager.handleDocUpdate error: No valid embedded collection for: ${docName}`);
         }
-        const embeddedData = this.#name.get(embeddedName);
+        const embeddedData = this.#name.get(docName);
         if (embeddedData) {
           embeddedData.collection = collection;
           for (const store of embeddedData.stores.values()) {
@@ -26655,6 +26647,7 @@ class EmbeddedStoreManager {
         }
       }
     } else {
+      this.#collectionToDocName.clear();
       this.#embeddedNames.clear();
       for (const embeddedData of this.#name.values()) {
         embeddedData.collection = null;
@@ -26677,7 +26670,8 @@ class EmbeddedStoreManager {
     }
     const match = EmbeddedStoreManager.#renderContextRegex.exec(renderContext);
     if (match) {
-      const embeddedName = match[2];
+      const docOrCollectionName = match.groups.name;
+      const embeddedName = this.#collectionToDocName.get(docOrCollectionName);
       if (!this.#name.has(embeddedName)) {
         return;
       }
@@ -41195,7 +41189,7 @@ function toggleDetails(details, { store, clickActive = true } = {}) {
   }, async (value) => {
     open = value;
     await tick();
-    handleAnimation();
+    handleAnimation2();
   });
   function animate2(a, b, value) {
     details.style.overflow = "hidden";
@@ -41215,7 +41209,7 @@ function toggleDetails(details, { store, clickActive = true } = {}) {
       details.style.overflow = "";
     };
   }
-  function handleAnimation() {
+  function handleAnimation2() {
     if (open) {
       const a = details.offsetHeight;
       if (animation) {
@@ -44635,48 +44629,6 @@ let AnimationStore$2 = class AnimationStore2 extends ObjectEntryStore {
     await game.settings.set("autoanimations", `aaAutorec-aefx`, currentMenu);
   }
 };
-class FVTTVersion {
-  static #regexMajorVersion = /(\d+)\./;
-  /**
-   * Returns true when Foundry is at least the specific major version number provided.
-   *
-   * @param {number}   version - Major version to check against.
-   *
-   * @returns {boolean} Foundry version is at least the major version specified.
-   */
-  static isAtLeast(version) {
-    if (!Number.isInteger(version) && version < 9) {
-      throw new TypeError(`'version' is not a positive integer greater than '9'.`);
-    }
-    return !globalThis.foundry.utils.isNewerVersion(version, globalThis.game.version ?? globalThis.game?.data?.version);
-  }
-  /**
-   * Returns true when Foundry is between the min / max major version numbers provided.
-   *
-   * @param {number}   min - Major minimum version to check against.
-   *
-   * @param {number}   max - Major maximum version to check against.
-   *
-   * @returns {boolean} Foundry version is at least the major version specified.
-   */
-  static isBetween(min, max) {
-    if (!Number.isInteger(min) && min < 9) {
-      throw new TypeError(`FVTTVersion.isBetween error: 'min' is not a positive integer greater than '9'.`);
-    }
-    if (!Number.isInteger(max) && max < 9) {
-      throw new TypeError(`FVTTVersion.isBetween error: 'max' is not a positive integer greater than '9'.`);
-    }
-    if (min > max) {
-      throw new TypeError(`FVTTVersion.isBetween error: 'min' is greater than 'max'.`);
-    }
-    const match = this.#regexMajorVersion.exec(globalThis.game.version ?? globalThis.game?.data?.version);
-    if (!match) {
-      throw new Error(`FVTTVersion.isBetween error: Could not parse 'globalThis.game.version'.`);
-    }
-    const version = parseInt(match[1], 10);
-    return version >= min && version <= max;
-  }
-}
 class FoundryStyles {
   static #sheet = void 0;
   static #sheetMap = /* @__PURE__ */ new Map();
@@ -45533,170 +45485,6 @@ class TJSToggleIconButton extends SvelteComponent {
   }
 }
 const TJSScrollContainer_svelte_svelte_type_style_lang = "";
-class CEImpl {
-  /**
-   * Provides a set of `KeyboardEvent.key` values that are allowed when handling `options.maxCharacterLength`.
-   *
-   * @type {Set<string>}
-   */
-  static #MAX_KEY_ALLOWED = /* @__PURE__ */ new Set([
-    "Backspace",
-    "Shift",
-    "Control",
-    "Alt",
-    "CapsLock",
-    "PageUp",
-    "PageDown",
-    "End",
-    "Home",
-    "ArrowLeft",
-    "ArrowUp",
-    "ArrowRight",
-    "ArrowDown",
-    "Insert",
-    "Delete",
-    "Meta"
-  ]);
-  /**
-   * Defines a regex to check for the shape of a raw Foundry document UUID.
-   *
-   * @type {RegExp}
-   */
-  static #UUID_REGEX = /(\.).*([a-zA-Z0-9]{16})/;
-  static hasEnterKeyHandler(options2) {
-    return typeof options2.preventEnterKey === "boolean" && options2.preventEnterKey || typeof options2.saveOnEnterKey === "boolean" && options2.saveOnEnterKey;
-  }
-  static insertTextAtCursor(text2) {
-    if (typeof globalThis.getSelection !== "function") {
-      console.warn(`[TRL] Browser does not support 'getSelection'.`);
-      return;
-    }
-    const selection = globalThis.getSelection();
-    const range2 = selection.getRangeAt(0);
-    range2.deleteContents();
-    const node = document.createTextNode(text2);
-    range2.insertNode(node);
-    for (let position = 0; position !== text2.length; position++) {
-      selection.modify("move", "right", "character");
-    }
-  }
-  /**
-   * Determines if the given key event is valid when preventing default action and max character length is reached.
-   *
-   * @param {KeyboardEvent}  event - A KeyboardEvent.
-   *
-   * @returns {boolean} Prevent default or not.
-   */
-  static isValidKeyForMaxCharacterLength(event) {
-    const selectionLength = typeof globalThis.getSelection === "function" ? globalThis.getSelection().getRangeAt(0).toString().length : 0;
-    if (selectionLength > 0) {
-      return false;
-    }
-    if ((event.ctrlKey || event.metaKey) && (event.code === "KeyA" || event.code === "KeyC" || event.code === "KeyV" || event.code === "KeyZ")) {
-      return false;
-    }
-    return !this.#MAX_KEY_ALLOWED.has(event.key);
-  }
-  /**
-   * Handles paste preprocessing. Prevents pasting when `options.maxContentLength` is set and only partially pastes
-   * text to fit within the max length.
-   *
-   * For Foundry v10 and above when `options.maxContentLength` is not defined pasted text is examined for the shape
-   * of a raw UUID and if detected attempts to retrieve the document and if found will generate a proper document link
-   * from it. You can get the raw UUID by context-clicking the icon in the app header bar for various documents.
-   *
-   * @param {HTMLDivElement} editorEl -
-   *
-   * @param {string}         text -
-   *
-   * @param {object}         options -
-   *
-   * @param {number}         maxCharacterLength -
-   *
-   * @returns {string}  Processed paste text.
-   */
-  static pastePreprocess(editorEl, text2, options2, maxCharacterLength) {
-    if (maxCharacterLength >= 0) {
-      if (typeof globalThis.getSelection !== "function") {
-        console.warn(`[TRL] Browser does not support 'getSelection'.`);
-        return "";
-      }
-      let content = striptags(text2);
-      if (this.hasEnterKeyHandler(options2)) {
-        content = content.replace(/[\n\r]+/g, "");
-      }
-      const bodyLength = editorEl.innerText.length;
-      const selectionLength = globalThis.getSelection().getRangeAt(0).toString().length;
-      if (selectionLength > 0) {
-        if (content.length > selectionLength) {
-          const adjustedTotalLength = content.length + bodyLength - selectionLength;
-          if (adjustedTotalLength > maxCharacterLength) {
-            content = content.substring(0, content.length - (adjustedTotalLength - maxCharacterLength));
-          }
-        }
-      } else {
-        if (content.length + bodyLength > maxCharacterLength) {
-          const remainingLength = maxCharacterLength - bodyLength;
-          content = content.substring(0, remainingLength);
-        }
-      }
-      text2 = content;
-    } else {
-      if (FVTTVersion.isAtLeast(10) && this.#UUID_REGEX.test(text2)) {
-        const uuidDoc = globalThis.fromUuidSync(text2);
-        if (uuidDoc) {
-          text2 = `@UUID[${text2}]{${uuidDoc.name}}`;
-        }
-      }
-    }
-    return text2;
-  }
-  /**
-   * Sets the initial selection based on `options.initialSelection`.
-   *
-   * @param {HTMLDivElement} editorEl - `.editor` element.
-   *
-   * @param {string}   initialSelection - Initial selection option.
-   *
-   * @param {string}   defaultValue - Default value if initialSelection is invalid.
-   */
-  static setInitialSelection(editorEl, initialSelection, defaultValue) {
-    const type = initialSelection === "all" || initialSelection === "end" || initialSelection === "start" ? initialSelection : defaultValue;
-    if (!editorEl || typeof globalThis.getSelection !== "function") {
-      console.warn(`[TRL] Browser does not support 'getSelection'.`);
-      return;
-    }
-    const selection = document.getSelection();
-    const range2 = document.createRange();
-    switch (type) {
-      case "all":
-        range2.selectNodeContents(editorEl);
-        selection.removeAllRanges();
-        selection.addRange(range2);
-        break;
-      case "end": {
-        const lastElementChild = editorEl.lastElementChild;
-        if (lastElementChild) {
-          range2.setStartAfter(lastElementChild);
-          range2.setEndAfter(lastElementChild);
-          selection.removeAllRanges();
-          selection.addRange(range2);
-        }
-        break;
-      }
-      case "start": {
-        const firstElementChild = editorEl.firstElementChild;
-        if (firstElementChild) {
-          range2.setStart(firstElementChild, 0);
-          range2.setEnd(firstElementChild, 0);
-          selection.removeAllRanges();
-          selection.addRange(range2);
-        }
-        break;
-      }
-    }
-  }
-}
 const TJSContentEdit_svelte_svelte_type_style_lang = "";
 globalThis.ProseMirror ? globalThis.ProseMirror.ProseMirrorKeyMaps : class {
 };
@@ -47182,7 +46970,7 @@ function instance$1m($$self, $$props, $$invalidate) {
   let $store, $$unsubscribe_store = noop, $$subscribe_store = () => ($$unsubscribe_store(), $$unsubscribe_store = subscribe(store, ($$value) => $$invalidate(11, $store = $$value)), store);
   $$self.$$.on_destroy.push(() => $$unsubscribe_storeIsValid());
   $$self.$$.on_destroy.push(() => $$unsubscribe_store());
-  let { input: input2 = void 0 } = $$props;
+  let { input = void 0 } = $$props;
   let { disabled = void 0 } = $$props;
   let { options: options2 = void 0 } = $$props;
   let { max = void 0 } = $$props;
@@ -47235,7 +47023,7 @@ function instance$1m($$self, $$props, $$invalidate) {
   }
   $$self.$$set = ($$props2) => {
     if ("input" in $$props2)
-      $$invalidate(15, input2 = $$props2.input);
+      $$invalidate(15, input = $$props2.input);
     if ("disabled" in $$props2)
       $$invalidate(0, disabled = $$props2.disabled);
     if ("options" in $$props2)
@@ -47260,12 +47048,12 @@ function instance$1m($$self, $$props, $$invalidate) {
   $$self.$$.update = () => {
     if ($$self.$$.dirty & /*input, disabled*/
     32769) {
-      $$invalidate(0, disabled = isObject(input2) && typeof input2.disabled === "boolean" ? input2.disabled : typeof disabled === "boolean" ? disabled : false);
+      $$invalidate(0, disabled = isObject(input) && typeof input.disabled === "boolean" ? input.disabled : typeof disabled === "boolean" ? disabled : false);
     }
     if ($$self.$$.dirty & /*input, options*/
     49152) {
       {
-        $$invalidate(14, options2 = isObject(input2) && isObject(input2.options) ? input2.options : isObject(options2) ? options2 : {});
+        $$invalidate(14, options2 = isObject(input) && isObject(input.options) ? input.options : isObject(options2) ? options2 : {});
         if (typeof options2?.blurOnEnterKey === "boolean") {
           localOptions.blurOnEnterKey = options2.blurOnEnterKey;
         }
@@ -47276,39 +47064,39 @@ function instance$1m($$self, $$props, $$invalidate) {
     }
     if ($$self.$$.dirty & /*input, max*/
     32770) {
-      $$invalidate(1, max = isObject(input2) && typeof input2.max === "number" ? input2.max : typeof max === "number" ? max : void 0);
+      $$invalidate(1, max = isObject(input) && typeof input.max === "number" ? input.max : typeof max === "number" ? max : void 0);
     }
     if ($$self.$$.dirty & /*input, min*/
     32772) {
-      $$invalidate(2, min = isObject(input2) && typeof input2.min === "number" ? input2.min : typeof min === "number" ? min : void 0);
+      $$invalidate(2, min = isObject(input) && typeof input.min === "number" ? input.min : typeof min === "number" ? min : void 0);
     }
     if ($$self.$$.dirty & /*input, placeholder*/
     32776) {
-      $$invalidate(3, placeholder = isObject(input2) && typeof input2.placeholder === "string" ? localize(input2.placeholder) : typeof placeholder === "string" ? localize(placeholder) : void 0);
+      $$invalidate(3, placeholder = isObject(input) && typeof input.placeholder === "string" ? localize(input.placeholder) : typeof placeholder === "string" ? localize(placeholder) : void 0);
     }
     if ($$self.$$.dirty & /*input, step*/
     32784) {
-      $$invalidate(4, step = isObject(input2) && typeof input2.step === "number" ? input2.step : typeof step === "number" ? step : void 0);
+      $$invalidate(4, step = isObject(input) && typeof input.step === "number" ? input.step : typeof step === "number" ? step : void 0);
     }
     if ($$self.$$.dirty & /*input, store*/
     32800) {
-      $$subscribe_store($$invalidate(5, store = isObject(input2) && isWritableStore(input2.store) ? input2.store : isWritableStore(store) ? store : writable$1(void 0)));
+      $$subscribe_store($$invalidate(5, store = isObject(input) && isWritableStore(input.store) ? input.store : isWritableStore(store) ? store : writable$1(void 0)));
     }
     if ($$self.$$.dirty & /*input, storeIsValid*/
     32832) {
-      $$subscribe_storeIsValid($$invalidate(6, storeIsValid = isObject(input2) && isReadableStore(input2.storeIsValid) ? input2.storeIsValid : isReadableStore(storeIsValid) ? storeIsValid : writable$1(true)));
+      $$subscribe_storeIsValid($$invalidate(6, storeIsValid = isObject(input) && isReadableStore(input.storeIsValid) ? input.storeIsValid : isReadableStore(storeIsValid) ? storeIsValid : writable$1(true)));
     }
     if ($$self.$$.dirty & /*input, storeIsValid*/
     32832) {
-      $$subscribe_storeIsValid($$invalidate(6, storeIsValid = isObject(input2) && isReadableStore(input2.storeIsValid) ? input2.storeIsValid : isReadableStore(storeIsValid) ? storeIsValid : writable$1(true)));
+      $$subscribe_storeIsValid($$invalidate(6, storeIsValid = isObject(input) && isReadableStore(input.storeIsValid) ? input.storeIsValid : isReadableStore(storeIsValid) ? storeIsValid : writable$1(true)));
     }
     if ($$self.$$.dirty & /*input, styles*/
     32896) {
-      $$invalidate(7, styles = isObject(input2) && isObject(input2.styles) ? input2.styles : typeof styles === "object" ? styles : void 0);
+      $$invalidate(7, styles = isObject(input) && isObject(input.styles) ? input.styles : typeof styles === "object" ? styles : void 0);
     }
     if ($$self.$$.dirty & /*input, efx*/
     33024) {
-      $$invalidate(8, efx = isObject(input2) && typeof input2.efx === "function" ? input2.efx : typeof efx === "function" ? efx : () => {
+      $$invalidate(8, efx = isObject(input) && typeof input.efx === "function" ? input.efx : typeof efx === "function" ? efx : () => {
       });
     }
   };
@@ -47328,7 +47116,7 @@ function instance$1m($$self, $$props, $$invalidate) {
     onFocusIn,
     onKeyDown,
     options2,
-    input2,
+    input,
     input_1_binding,
     input_1_input_handler
   ];
@@ -47487,7 +47275,7 @@ function instance$1l($$self, $$props, $$invalidate) {
   let $store, $$unsubscribe_store = noop, $$subscribe_store = () => ($$unsubscribe_store(), $$unsubscribe_store = subscribe(store, ($$value) => $$invalidate(9, $store = $$value)), store);
   $$self.$$.on_destroy.push(() => $$unsubscribe_storeIsValid());
   $$self.$$.on_destroy.push(() => $$unsubscribe_store());
-  let { input: input2 = void 0 } = $$props;
+  let { input = void 0 } = $$props;
   let { type = void 0 } = $$props;
   let { disabled = void 0 } = $$props;
   let { options: options2 = void 0 } = $$props;
@@ -47542,7 +47330,7 @@ function instance$1l($$self, $$props, $$invalidate) {
   }
   $$self.$$set = ($$props2) => {
     if ("input" in $$props2)
-      $$invalidate(13, input2 = $$props2.input);
+      $$invalidate(13, input = $$props2.input);
     if ("type" in $$props2)
       $$invalidate(0, type = $$props2.type);
     if ("disabled" in $$props2)
@@ -47564,7 +47352,7 @@ function instance$1l($$self, $$props, $$invalidate) {
     if ($$self.$$.dirty & /*input, type*/
     8193) {
       {
-        $$invalidate(0, type = isObject(input2) && typeof input2.type === "string" ? input2.type : typeof type === "string" ? type : "text");
+        $$invalidate(0, type = isObject(input) && typeof input.type === "string" ? input.type : typeof type === "string" ? type : "text");
         switch (type) {
           case "email":
           case "password":
@@ -47579,12 +47367,12 @@ function instance$1l($$self, $$props, $$invalidate) {
     }
     if ($$self.$$.dirty & /*input, disabled*/
     8194) {
-      $$invalidate(1, disabled = isObject(input2) && typeof input2.disabled === "boolean" ? input2.disabled : typeof disabled === "boolean" ? disabled : false);
+      $$invalidate(1, disabled = isObject(input) && typeof input.disabled === "boolean" ? input.disabled : typeof disabled === "boolean" ? disabled : false);
     }
     if ($$self.$$.dirty & /*input, options*/
     12288) {
       {
-        $$invalidate(12, options2 = isObject(input2) && isObject(input2.options) ? input2.options : isObject(options2) ? options2 : {});
+        $$invalidate(12, options2 = isObject(input) && isObject(input.options) ? input.options : isObject(options2) ? options2 : {});
         if (typeof options2?.blurOnEnterKey === "boolean") {
           localOptions.blurOnEnterKey = options2.blurOnEnterKey;
         }
@@ -47598,23 +47386,23 @@ function instance$1l($$self, $$props, $$invalidate) {
     }
     if ($$self.$$.dirty & /*input, placeholder*/
     8196) {
-      $$invalidate(2, placeholder = isObject(input2) && typeof input2.placeholder === "string" ? localize(input2.placeholder) : typeof placeholder === "string" ? localize(placeholder) : void 0);
+      $$invalidate(2, placeholder = isObject(input) && typeof input.placeholder === "string" ? localize(input.placeholder) : typeof placeholder === "string" ? localize(placeholder) : void 0);
     }
     if ($$self.$$.dirty & /*input, store*/
     8200) {
-      $$subscribe_store($$invalidate(3, store = isObject(input2) && isWritableStore(input2.store) ? input2.store : isWritableStore(store) ? store : writable$1(void 0)));
+      $$subscribe_store($$invalidate(3, store = isObject(input) && isWritableStore(input.store) ? input.store : isWritableStore(store) ? store : writable$1(void 0)));
     }
     if ($$self.$$.dirty & /*input, storeIsValid*/
     8208) {
-      $$subscribe_storeIsValid($$invalidate(4, storeIsValid = isObject(input2) && isReadableStore(input2.storeIsValid) ? input2.storeIsValid : isReadableStore(storeIsValid) ? storeIsValid : writable$1(true)));
+      $$subscribe_storeIsValid($$invalidate(4, storeIsValid = isObject(input) && isReadableStore(input.storeIsValid) ? input.storeIsValid : isReadableStore(storeIsValid) ? storeIsValid : writable$1(true)));
     }
     if ($$self.$$.dirty & /*input, styles*/
     8224) {
-      $$invalidate(5, styles = isObject(input2) && isObject(input2.styles) ? input2.styles : typeof styles === "object" ? styles : void 0);
+      $$invalidate(5, styles = isObject(input) && isObject(input.styles) ? input.styles : typeof styles === "object" ? styles : void 0);
     }
     if ($$self.$$.dirty & /*input, efx*/
     8256) {
-      $$invalidate(6, efx = isObject(input2) && typeof input2.efx === "function" ? input2.efx : typeof efx === "function" ? efx : () => {
+      $$invalidate(6, efx = isObject(input) && typeof input.efx === "function" ? input.efx : typeof efx === "function" ? efx : () => {
       });
     }
   };
@@ -47632,7 +47420,7 @@ function instance$1l($$self, $$props, $$invalidate) {
     onFocusIn,
     onKeyDown,
     options2,
-    input2,
+    input,
     input_1_binding,
     input_1_input_handler
   ];
@@ -47732,17 +47520,17 @@ function create_fragment$1s(ctx) {
   };
 }
 function instance$1k($$self, $$props, $$invalidate) {
-  let { input: input2 = void 0 } = $$props;
+  let { input = void 0 } = $$props;
   let component;
   $$self.$$set = ($$props2) => {
     if ("input" in $$props2)
-      $$invalidate(0, input2 = $$props2.input);
+      $$invalidate(0, input = $$props2.input);
   };
   $$self.$$.update = () => {
     if ($$self.$$.dirty & /*input*/
     1) {
       {
-        const type = isObject(input2) && typeof input2.type === "string" ? input2.type : "text";
+        const type = isObject(input) && typeof input.type === "string" ? input.type : "text";
         switch (type) {
           case "email":
           case "password":
@@ -47760,7 +47548,7 @@ function instance$1k($$self, $$props, $$invalidate) {
       }
     }
   };
-  return [input2, component];
+  return [input, component];
 }
 class TJSInput extends SvelteComponent {
   constructor(options2) {
@@ -49581,7 +49369,7 @@ function create_if_block_5$2(ctx) {
   };
 }
 function create_if_block_4$2(ctx) {
-  let input2;
+  let input;
   let input_id_value;
   let input_min_value;
   let input_max_value;
@@ -49593,29 +49381,29 @@ function create_if_block_4$2(ctx) {
   let dispose;
   return {
     c() {
-      input2 = element("input");
+      input = element("input");
       t0 = space();
       span = element("span");
       t1 = text(
         /*$store*/
         ctx[1]
       );
-      attr(input2, "type", "range");
-      attr(input2, "id", input_id_value = /*setting*/
+      attr(input, "type", "range");
+      attr(input, "id", input_id_value = /*setting*/
       ctx[0].id);
-      attr(input2, "min", input_min_value = /*setting*/
+      attr(input, "min", input_min_value = /*setting*/
       ctx[0].range.min);
-      attr(input2, "max", input_max_value = /*setting*/
+      attr(input, "max", input_max_value = /*setting*/
       ctx[0].range.max);
-      attr(input2, "step", input_step_value = /*setting*/
+      attr(input, "step", input_step_value = /*setting*/
       ctx[0].range.step);
-      attr(input2, "class", "svelte-auto-ip8xeq");
+      attr(input, "class", "svelte-auto-ip8xeq");
       attr(span, "class", "range-value svelte-auto-ip8xeq");
     },
     m(target2, anchor) {
-      insert(target2, input2, anchor);
+      insert(target2, input, anchor);
       set_input_value(
-        input2,
+        input,
         /*$store*/
         ctx[1]
       );
@@ -49625,13 +49413,13 @@ function create_if_block_4$2(ctx) {
       if (!mounted) {
         dispose = [
           listen(
-            input2,
+            input,
             "change",
             /*input_change_input_handler*/
             ctx[5]
           ),
           listen(
-            input2,
+            input,
             "input",
             /*input_change_input_handler*/
             ctx[5]
@@ -49644,27 +49432,27 @@ function create_if_block_4$2(ctx) {
       if (dirty & /*setting*/
       1 && input_id_value !== (input_id_value = /*setting*/
       ctx2[0].id)) {
-        attr(input2, "id", input_id_value);
+        attr(input, "id", input_id_value);
       }
       if (dirty & /*setting*/
       1 && input_min_value !== (input_min_value = /*setting*/
       ctx2[0].range.min)) {
-        attr(input2, "min", input_min_value);
+        attr(input, "min", input_min_value);
       }
       if (dirty & /*setting*/
       1 && input_max_value !== (input_max_value = /*setting*/
       ctx2[0].range.max)) {
-        attr(input2, "max", input_max_value);
+        attr(input, "max", input_max_value);
       }
       if (dirty & /*setting*/
       1 && input_step_value !== (input_step_value = /*setting*/
       ctx2[0].range.step)) {
-        attr(input2, "step", input_step_value);
+        attr(input, "step", input_step_value);
       }
       if (dirty & /*$store*/
       2) {
         set_input_value(
-          input2,
+          input,
           /*$store*/
           ctx2[1]
         );
@@ -49681,7 +49469,7 @@ function create_if_block_4$2(ctx) {
     o: noop,
     d(detaching) {
       if (detaching)
-        detach(input2);
+        detach(input);
       if (detaching)
         detach(t0);
       if (detaching)
@@ -49732,24 +49520,24 @@ function create_if_block_3$5(ctx) {
   };
 }
 function create_if_block_2$8(ctx) {
-  let input2;
+  let input;
   let input_id_value;
   let mounted;
   let dispose;
   return {
     c() {
-      input2 = element("input");
-      attr(input2, "type", "checkbox");
-      attr(input2, "id", input_id_value = /*setting*/
+      input = element("input");
+      attr(input, "type", "checkbox");
+      attr(input, "id", input_id_value = /*setting*/
       ctx[0].id);
     },
     m(target2, anchor) {
-      insert(target2, input2, anchor);
-      input2.checked = /*$store*/
+      insert(target2, input, anchor);
+      input.checked = /*$store*/
       ctx[1];
       if (!mounted) {
         dispose = listen(
-          input2,
+          input,
           "change",
           /*input_change_handler*/
           ctx[4]
@@ -49761,11 +49549,11 @@ function create_if_block_2$8(ctx) {
       if (dirty & /*setting*/
       1 && input_id_value !== (input_id_value = /*setting*/
       ctx2[0].id)) {
-        attr(input2, "id", input_id_value);
+        attr(input, "id", input_id_value);
       }
       if (dirty & /*$store*/
       2) {
-        input2.checked = /*$store*/
+        input.checked = /*$store*/
         ctx2[1];
       }
     },
@@ -49773,7 +49561,7 @@ function create_if_block_2$8(ctx) {
     o: noop,
     d(detaching) {
       if (detaching)
-        detach(input2);
+        detach(input);
       mounted = false;
       dispose();
     }
@@ -52898,7 +52686,7 @@ function create_fragment$1j(ctx) {
   let t0;
   let t1;
   let div1;
-  let input2;
+  let input;
   let mounted;
   let dispose;
   return {
@@ -52912,17 +52700,17 @@ function create_fragment$1j(ctx) {
       );
       t1 = space();
       div1 = element("div");
-      input2 = element("input");
+      input = element("input");
       attr(label_1, "for", "");
-      attr(input2, "type", "number");
+      attr(input, "type", "number");
       attr(
-        input2,
+        input,
         "placeholder",
         /*placeholder*/
         ctx[4]
       );
       attr(
-        input2,
+        input,
         "step",
         /*step*/
         ctx[5]
@@ -52941,9 +52729,9 @@ function create_fragment$1j(ctx) {
       append(label_1, t0);
       append(div2, t1);
       append(div2, div1);
-      append(div1, input2);
+      append(div1, input);
       set_input_value(
-        input2,
+        input,
         /*$animation*/
         ctx[6][
           /*section*/
@@ -52955,7 +52743,7 @@ function create_fragment$1j(ctx) {
       );
       if (!mounted) {
         dispose = listen(
-          input2,
+          input,
           "input",
           /*input_input_handler*/
           ctx[8]
@@ -52974,7 +52762,7 @@ function create_fragment$1j(ctx) {
       if (dirty & /*placeholder*/
       16) {
         attr(
-          input2,
+          input,
           "placeholder",
           /*placeholder*/
           ctx2[4]
@@ -52983,14 +52771,14 @@ function create_fragment$1j(ctx) {
       if (dirty & /*step*/
       32) {
         attr(
-          input2,
+          input,
           "step",
           /*step*/
           ctx2[5]
         );
       }
       if (dirty & /*$animation, section, field*/
-      67 && to_number(input2.value) !== /*$animation*/
+      67 && to_number(input.value) !== /*$animation*/
       ctx2[6][
         /*section*/
         ctx2[0]
@@ -52999,7 +52787,7 @@ function create_fragment$1j(ctx) {
         ctx2[1]
       ]) {
         set_input_value(
-          input2,
+          input,
           /*$animation*/
           ctx2[6][
             /*section*/
@@ -54570,20 +54358,20 @@ function create_fragment$1d(ctx) {
   let td27;
   let t85;
   let tr15;
-  let t87;
-  let tr21;
   let td28;
   let strong22;
-  let t91;
-  let td37;
-  let table0;
-  let tr16;
-  let t93;
-  let tr17;
+  let t87;
   let td29;
+  let t89;
+  let tr16;
+  let t91;
+  let tr22;
+  let td30;
   let strong23;
   let t95;
-  let td30;
+  let td39;
+  let table0;
+  let tr17;
   let t97;
   let tr18;
   let td31;
@@ -54603,17 +54391,23 @@ function create_fragment$1d(ctx) {
   let t107;
   let td36;
   let t109;
-  let tr22;
-  let td38;
+  let tr21;
+  let td37;
   let strong27;
   let t111;
-  let td39;
+  let td38;
   let t113;
   let tr23;
   let td40;
   let strong28;
   let t115;
   let td41;
+  let t117;
+  let tr24;
+  let td42;
+  let strong29;
+  let t119;
+  let td43;
   return {
     c() {
       table1 = element("table");
@@ -54727,71 +54521,79 @@ function create_fragment$1d(ctx) {
       tr14 = element("tr");
       td26 = element("td");
       strong21 = element("strong");
-      strong21.textContent = `${localize("autoanimations.menus.z-index")}`;
+      strong21.textContent = `${localize("autoanimations.variants.xray")}`;
       t83 = space();
       td27 = element("td");
-      td27.textContent = "Index of the animation when they are played at the same elevation";
+      td27.textContent = "This will cause the effect to ignore vision-based masking";
       t85 = space();
       tr15 = element("tr");
-      tr15.innerHTML = `<th colspan="2" style="background: rgba(17, 0, 148, .5)">Persistent Options</th>`;
-      t87 = space();
-      tr21 = element("tr");
       td28 = element("td");
       strong22 = element("strong");
-      strong22.textContent = `${localize("autoanimations.menus.persistant")}  ${localize("autoanimations.menus.type")}`;
-      t91 = space();
-      td37 = element("td");
-      table0 = element("table");
-      tr16 = element("tr");
-      tr16.innerHTML = `<th colspan="2">If Persistent is enabled, you can choose the type here.</th>`;
-      t93 = space();
-      tr17 = element("tr");
+      strong22.textContent = `${localize("autoanimations.menus.z-index")}`;
+      t87 = space();
       td29 = element("td");
-      strong23 = element("strong");
-      strong23.textContent = `${localize("autoanimations.menus.overheadtile")}`;
-      t95 = space();
+      td29.textContent = "Index of the animation when they are played at the same elevation";
+      t89 = space();
+      tr16 = element("tr");
+      tr16.innerHTML = `<th colspan="2" style="background: rgba(17, 0, 148, .5)">Persistent Options</th>`;
+      t91 = space();
+      tr22 = element("tr");
       td30 = element("td");
-      td30.textContent = "Creates effect as an Overhead Tile";
+      strong23 = element("strong");
+      strong23.textContent = `${localize("autoanimations.menus.persistant")}  ${localize("autoanimations.menus.type")}`;
+      t95 = space();
+      td39 = element("td");
+      table0 = element("table");
+      tr17 = element("tr");
+      tr17.innerHTML = `<th colspan="2">If Persistent is enabled, you can choose the type here.</th>`;
       t97 = space();
       tr18 = element("tr");
       td31 = element("td");
       strong24 = element("strong");
-      strong24.textContent = `${localize("autoanimations.menus.groundtile")}`;
+      strong24.textContent = `${localize("autoanimations.menus.overheadtile")}`;
       t99 = space();
       td32 = element("td");
-      td32.textContent = "Creates Effect as a Tile below tokens";
+      td32.textContent = "Creates effect as an Overhead Tile";
       t101 = space();
       tr19 = element("tr");
       td33 = element("td");
       strong25 = element("strong");
-      strong25.textContent = `${localize("autoanimations.menus.sequencereffect")}`;
+      strong25.textContent = `${localize("autoanimations.menus.groundtile")}`;
       t103 = space();
       td34 = element("td");
-      td34.textContent = "Creates a Persistent Sequencer effect";
+      td34.textContent = "Creates Effect as a Tile below tokens";
       t105 = space();
       tr20 = element("tr");
       td35 = element("td");
       strong26 = element("strong");
-      strong26.textContent = `${localize("autoanimations.menus.attachtotemplate")}`;
+      strong26.textContent = `${localize("autoanimations.menus.sequencereffect")}`;
       t107 = space();
       td36 = element("td");
-      td36.textContent = "Creates a Persistent Sequencer effect and attaches to the template (draggable)";
+      td36.textContent = "Creates a Persistent Sequencer effect";
       t109 = space();
-      tr22 = element("tr");
-      td38 = element("td");
+      tr21 = element("tr");
+      td37 = element("td");
       strong27 = element("strong");
-      strong27.textContent = `${localize("autoanimations.menus.occlusionMode")}`;
+      strong27.textContent = `${localize("autoanimations.menus.attachtotemplate")}`;
       t111 = space();
-      td39 = element("td");
-      td39.textContent = "If Persistent and Type is set to Overhead Tile, choose the Occlusion Mode";
+      td38 = element("td");
+      td38.textContent = "Creates a Persistent Sequencer effect and attaches to the template (draggable)";
       t113 = space();
       tr23 = element("tr");
       td40 = element("td");
       strong28 = element("strong");
-      strong28.textContent = `${localize("autoanimations.menus.occlusionAlpha")}`;
+      strong28.textContent = `${localize("autoanimations.menus.occlusionMode")}`;
       t115 = space();
       td41 = element("td");
-      td41.textContent = "If Persistent and Type is set to Overhead Tile, choose the Occlusion Alpha";
+      td41.textContent = "If Persistent and Type is set to Overhead Tile, choose the Occlusion Mode";
+      t117 = space();
+      tr24 = element("tr");
+      td42 = element("td");
+      strong29 = element("strong");
+      strong29.textContent = `${localize("autoanimations.menus.occlusionAlpha")}`;
+      t119 = space();
+      td43 = element("td");
+      td43.textContent = "If Persistent and Type is set to Overhead Tile, choose the Occlusion Alpha";
       attr(td4, "class", "aa-table");
       attr(td6, "class", "aa-table");
       attr(td8, "class", "aa-table");
@@ -54805,16 +54607,17 @@ function create_fragment$1d(ctx) {
       attr(td24, "class", "aa-table");
       attr(td26, "class", "aa-table");
       attr(td28, "class", "aa-table");
-      attr(td29, "class", "aa-table");
+      attr(td30, "class", "aa-table");
       attr(td31, "class", "aa-table");
       attr(td33, "class", "aa-table");
       attr(td35, "class", "aa-table");
+      attr(td37, "class", "aa-table");
       attr(table0, "id", "options-table");
       attr(table0, "cellpadding", "0");
       attr(table0, "cellspacing", "0");
       attr(table0, "border", "1");
-      attr(td38, "class", "aa-table");
       attr(td40, "class", "aa-table");
+      attr(td42, "class", "aa-table");
       attr(table1, "id", "aa-options-table");
       attr(table1, "cellpadding", "0");
       attr(table1, "cellspacing", "0");
@@ -54905,20 +54708,20 @@ function create_fragment$1d(ctx) {
       append(tr14, td27);
       append(table1, t85);
       append(table1, tr15);
-      append(table1, t87);
-      append(table1, tr21);
-      append(tr21, td28);
+      append(tr15, td28);
       append(td28, strong22);
-      append(tr21, t91);
-      append(tr21, td37);
-      append(td37, table0);
-      append(table0, tr16);
-      append(table0, t93);
+      append(tr15, t87);
+      append(tr15, td29);
+      append(table1, t89);
+      append(table1, tr16);
+      append(table1, t91);
+      append(table1, tr22);
+      append(tr22, td30);
+      append(td30, strong23);
+      append(tr22, t95);
+      append(tr22, td39);
+      append(td39, table0);
       append(table0, tr17);
-      append(tr17, td29);
-      append(td29, strong23);
-      append(tr17, t95);
-      append(tr17, td30);
       append(table0, t97);
       append(table0, tr18);
       append(tr18, td31);
@@ -54937,18 +54740,24 @@ function create_fragment$1d(ctx) {
       append(td35, strong26);
       append(tr20, t107);
       append(tr20, td36);
-      append(table1, t109);
-      append(table1, tr22);
-      append(tr22, td38);
-      append(td38, strong27);
-      append(tr22, t111);
-      append(tr22, td39);
+      append(table0, t109);
+      append(table0, tr21);
+      append(tr21, td37);
+      append(td37, strong27);
+      append(tr21, t111);
+      append(tr21, td38);
       append(table1, t113);
       append(table1, tr23);
       append(tr23, td40);
       append(td40, strong28);
       append(tr23, t115);
       append(tr23, td41);
+      append(table1, t117);
+      append(table1, tr24);
+      append(tr24, td42);
+      append(td42, strong29);
+      append(tr24, t119);
+      append(tr24, td43);
     },
     p: noop,
     i: noop,
@@ -57424,7 +57233,7 @@ function create_fragment$18(ctx) {
   let label2_class_value;
   let t5;
   let div1;
-  let input2;
+  let input;
   let div2_class_value;
   let mounted;
   let dispose;
@@ -57448,7 +57257,7 @@ function create_fragment$18(ctx) {
       );
       t5 = space();
       div1 = element("div");
-      input2 = element("input");
+      input = element("input");
       attr(label0, "for", "");
       attr(label0, "class", label0_class_value = "aaLabelBorder " + (!/*isWait*/
       ctx[6] ? "aaIsSelected" : "") + " svelte-auto-bsgjrv");
@@ -57458,15 +57267,15 @@ function create_fragment$18(ctx) {
       attr(label2, "class", label2_class_value = "aaLabelBorder " + /*isWait*/
       (ctx[6] ? "aaIsSelected" : "") + " svelte-auto-bsgjrv");
       attr(label2, "role", "presentation");
-      attr(input2, "type", "number");
+      attr(input, "type", "number");
       attr(
-        input2,
+        input,
         "placeholder",
         /*placeholder*/
         ctx[3]
       );
       attr(
-        input2,
+        input,
         "step",
         /*step*/
         ctx[4]
@@ -57488,9 +57297,9 @@ function create_fragment$18(ctx) {
       append(label2, t4);
       append(div2, t5);
       append(div2, div1);
-      append(div1, input2);
+      append(div1, input);
       set_input_value(
-        input2,
+        input,
         /*$animation*/
         ctx[5][
           /*section*/
@@ -57515,7 +57324,7 @@ function create_fragment$18(ctx) {
             ctx[13]
           ),
           listen(
-            input2,
+            input,
             "input",
             /*input_input_handler*/
             ctx[14]
@@ -57538,7 +57347,7 @@ function create_fragment$18(ctx) {
       if (dirty & /*placeholder*/
       8) {
         attr(
-          input2,
+          input,
           "placeholder",
           /*placeholder*/
           ctx2[3]
@@ -57547,14 +57356,14 @@ function create_fragment$18(ctx) {
       if (dirty & /*step*/
       16) {
         attr(
-          input2,
+          input,
           "step",
           /*step*/
           ctx2[4]
         );
       }
       if (dirty & /*$animation, section, field*/
-      35 && to_number(input2.value) !== /*$animation*/
+      35 && to_number(input.value) !== /*$animation*/
       ctx2[5][
         /*section*/
         ctx2[0]
@@ -57563,7 +57372,7 @@ function create_fragment$18(ctx) {
         ctx2[1]
       ]) {
         set_input_value(
-          input2,
+          input,
           /*$animation*/
           ctx2[5][
             /*section*/
@@ -58591,22 +58400,22 @@ function create_default_slot$v(ctx) {
 }
 function create_summary_end_slot$n(ctx) {
   let div;
-  let input2;
+  let input;
   let mounted;
   let dispose;
   return {
     c() {
       div = element("div");
-      input2 = element("input");
-      attr(input2, "type", "checkbox");
-      set_style(input2, "align-self", "center");
-      attr(input2, "title", "Toggle Sound On/Off");
+      input = element("input");
+      attr(input, "type", "checkbox");
+      set_style(input, "align-self", "center");
+      attr(input, "title", "Toggle Sound On/Off");
       attr(div, "slot", "summary-end");
     },
     m(target2, anchor) {
       insert(target2, div, anchor);
-      append(div, input2);
-      input2.checked = /*$animation*/
+      append(div, input);
+      input.checked = /*$animation*/
       ctx[1][
         /*section*/
         ctx[0]
@@ -58614,13 +58423,13 @@ function create_summary_end_slot$n(ctx) {
       if (!mounted) {
         dispose = [
           listen(
-            input2,
+            input,
             "change",
             /*input_change_handler*/
             ctx[8]
           ),
           listen(
-            input2,
+            input,
             "change",
             /*change_handler*/
             ctx[9]
@@ -58632,7 +58441,7 @@ function create_summary_end_slot$n(ctx) {
     p(ctx2, dirty) {
       if (dirty & /*$animation, section*/
       3) {
-        input2.checked = /*$animation*/
+        input.checked = /*$animation*/
         ctx2[1][
           /*section*/
           ctx2[0]
@@ -58815,7 +58624,7 @@ function create_fragment$15(ctx) {
   let label2_class_value;
   let t5;
   let div1;
-  let input2;
+  let input;
   let div2_class_value;
   let mounted;
   let dispose;
@@ -58839,7 +58648,7 @@ function create_fragment$15(ctx) {
       );
       t5 = space();
       div1 = element("div");
-      input2 = element("input");
+      input = element("input");
       attr(label0, "for", "");
       attr(label0, "class", label0_class_value = "aaLabelBorder " + (!/*isRadius*/
       ctx[6] ? "aaIsSelected" : "") + " svelte-auto-bsgjrv");
@@ -58849,15 +58658,15 @@ function create_fragment$15(ctx) {
       attr(label2, "class", label2_class_value = "aaLabelBorder " + /*isRadius*/
       (ctx[6] ? "aaIsSelected" : "") + " svelte-auto-bsgjrv");
       attr(label2, "role", "presentation");
-      attr(input2, "type", "number");
+      attr(input, "type", "number");
       attr(
-        input2,
+        input,
         "placeholder",
         /*placeholder*/
         ctx[3]
       );
       attr(
-        input2,
+        input,
         "step",
         /*step*/
         ctx[4]
@@ -58879,9 +58688,9 @@ function create_fragment$15(ctx) {
       append(label2, t4);
       append(div2, t5);
       append(div2, div1);
-      append(div1, input2);
+      append(div1, input);
       set_input_value(
-        input2,
+        input,
         /*$animation*/
         ctx[5][
           /*section*/
@@ -58906,7 +58715,7 @@ function create_fragment$15(ctx) {
             ctx[13]
           ),
           listen(
-            input2,
+            input,
             "input",
             /*input_input_handler*/
             ctx[14]
@@ -58929,7 +58738,7 @@ function create_fragment$15(ctx) {
       if (dirty & /*placeholder*/
       8) {
         attr(
-          input2,
+          input,
           "placeholder",
           /*placeholder*/
           ctx2[3]
@@ -58938,14 +58747,14 @@ function create_fragment$15(ctx) {
       if (dirty & /*step*/
       16) {
         attr(
-          input2,
+          input,
           "step",
           /*step*/
           ctx2[4]
         );
       }
       if (dirty & /*$animation, section, field*/
-      35 && to_number(input2.value) !== /*$animation*/
+      35 && to_number(input.value) !== /*$animation*/
       ctx2[5][
         /*section*/
         ctx2[0]
@@ -58954,7 +58763,7 @@ function create_fragment$15(ctx) {
         ctx2[1]
       ]) {
         set_input_value(
-          input2,
+          input,
           /*$animation*/
           ctx2[5][
             /*section*/
@@ -59891,29 +59700,29 @@ function create_default_slot$t(ctx) {
 }
 function create_summary_end_slot$l(ctx) {
   let div;
-  let input2;
+  let input;
   let mounted;
   let dispose;
   return {
     c() {
       div = element("div");
-      input2 = element("input");
-      attr(input2, "type", "checkbox");
-      set_style(input2, "align-self", "center");
-      attr(input2, "title", "Enable Color Tint");
+      input = element("input");
+      attr(input, "type", "checkbox");
+      set_style(input, "align-self", "center");
+      attr(input, "title", "Enable Color Tint");
       attr(div, "slot", "summary-end");
     },
     m(target2, anchor) {
       insert(target2, div, anchor);
-      append(div, input2);
-      input2.checked = /*$animation*/
+      append(div, input);
+      input.checked = /*$animation*/
       ctx[1][
         /*section*/
         ctx[0]
       ].options.tint;
       if (!mounted) {
         dispose = listen(
-          input2,
+          input,
           "change",
           /*input_change_handler*/
           ctx[5]
@@ -59924,7 +59733,7 @@ function create_summary_end_slot$l(ctx) {
     p(ctx2, dirty) {
       if (dirty & /*$animation, section*/
       3) {
-        input2.checked = /*$animation*/
+        input.checked = /*$animation*/
         ctx2[1][
           /*section*/
           ctx2[0]
@@ -60190,33 +59999,33 @@ function create_default_slot$s(ctx) {
 }
 function create_summary_end_slot$k(ctx) {
   let div;
-  let input2;
+  let input;
   let mounted;
   let dispose;
   return {
     c() {
       div = element("div");
-      input2 = element("input");
-      attr(input2, "type", "checkbox");
-      set_style(input2, "align-self", "center");
-      attr(input2, "title", "Toggle Source FX On/Off");
+      input = element("input");
+      attr(input, "type", "checkbox");
+      set_style(input, "align-self", "center");
+      attr(input, "title", "Toggle Source FX On/Off");
       attr(div, "slot", "summary-end");
     },
     m(target2, anchor) {
       insert(target2, div, anchor);
-      append(div, input2);
-      input2.checked = /*$animation*/
+      append(div, input);
+      input.checked = /*$animation*/
       ctx[0].source.enable;
       if (!mounted) {
         dispose = [
           listen(
-            input2,
+            input,
             "change",
             /*input_change_handler*/
             ctx[7]
           ),
           listen(
-            input2,
+            input,
             "change",
             /*change_handler*/
             ctx[8]
@@ -60228,7 +60037,7 @@ function create_summary_end_slot$k(ctx) {
     p(ctx2, dirty) {
       if (dirty & /*$animation*/
       1) {
-        input2.checked = /*$animation*/
+        input.checked = /*$animation*/
         ctx2[0].source.enable;
       }
     },
@@ -61110,33 +60919,33 @@ function create_default_slot$q(ctx) {
 }
 function create_summary_end_slot$i(ctx) {
   let div;
-  let input2;
+  let input;
   let mounted;
   let dispose;
   return {
     c() {
       div = element("div");
-      input2 = element("input");
-      attr(input2, "type", "checkbox");
-      set_style(input2, "align-self", "center");
-      attr(input2, "title", "Toggle Secondary On/Off");
+      input = element("input");
+      attr(input, "type", "checkbox");
+      set_style(input, "align-self", "center");
+      attr(input, "title", "Toggle Secondary On/Off");
       attr(div, "slot", "summary-end");
     },
     m(target2, anchor) {
       insert(target2, div, anchor);
-      append(div, input2);
-      input2.checked = /*$animation*/
+      append(div, input);
+      input.checked = /*$animation*/
       ctx[0].secondary.enable;
       if (!mounted) {
         dispose = [
           listen(
-            input2,
+            input,
             "change",
             /*input_change_handler*/
             ctx[7]
           ),
           listen(
-            input2,
+            input,
             "change",
             /*change_handler*/
             ctx[8]
@@ -61148,7 +60957,7 @@ function create_summary_end_slot$i(ctx) {
     p(ctx2, dirty) {
       if (dirty & /*$animation*/
       1) {
-        input2.checked = /*$animation*/
+        input.checked = /*$animation*/
         ctx2[0].secondary.enable;
       }
     },
@@ -63192,7 +63001,7 @@ function create_each_block$9(key_1, ctx) {
 }
 function create_fragment$W(ctx) {
   let div;
-  let input2;
+  let input;
   let t0;
   let datalist;
   let each_blocks = [];
@@ -63217,7 +63026,7 @@ function create_fragment$W(ctx) {
   return {
     c() {
       div = element("div");
-      input2 = element("input");
+      input = element("input");
       t0 = space();
       datalist = element("datalist");
       for (let i2 = 0; i2 < each_blocks.length; i2 += 1) {
@@ -63225,17 +63034,17 @@ function create_fragment$W(ctx) {
       }
       t1 = space();
       i = element("i");
-      attr(input2, "type", "text");
-      attr(input2, "class", "aa-MacroInput svelte-auto-j7d5qn");
+      attr(input, "type", "text");
+      attr(input, "class", "aa-MacroInput svelte-auto-j7d5qn");
       attr(
-        input2,
+        input,
         "list",
         /*id*/
         ctx[5]
       );
-      set_style(input2, "flex", "1");
-      set_style(input2, "margin-right", "5px");
-      attr(input2, "placeholder", localize("autoanimations.menus.insertMacro"));
+      set_style(input, "flex", "1");
+      set_style(input, "margin-right", "5px");
+      attr(input, "placeholder", localize("autoanimations.menus.insertMacro"));
       attr(
         datalist,
         "id",
@@ -63251,9 +63060,9 @@ function create_fragment$W(ctx) {
     },
     m(target2, anchor) {
       insert(target2, div, anchor);
-      append(div, input2);
+      append(div, input);
       set_input_value(
-        input2,
+        input,
         /*$animation*/
         ctx[0].macro.name
       );
@@ -63269,25 +63078,25 @@ function create_fragment$W(ctx) {
       if (!mounted) {
         dispose = [
           listen(
-            input2,
+            input,
             "input",
             /*input_input_handler*/
             ctx[8]
           ),
           listen(
-            input2,
+            input,
             "keyup",
             /*keyup_handler*/
             ctx[9]
           ),
           listen(
-            input2,
+            input,
             "change",
             /*change_handler*/
             ctx[10]
           ),
           listen(
-            input2,
+            input,
             "focus",
             /*focus_handler*/
             ctx[11]
@@ -63304,10 +63113,10 @@ function create_fragment$W(ctx) {
     },
     p(ctx2, [dirty]) {
       if (dirty & /*$animation*/
-      1 && input2.value !== /*$animation*/
+      1 && input.value !== /*$animation*/
       ctx2[0].macro.name) {
         set_input_value(
-          input2,
+          input,
           /*$animation*/
           ctx2[0].macro.name
         );
@@ -64474,7 +64283,7 @@ function create_fragment$R(ctx) {
   let label1;
   let t9;
   let div2;
-  let input2;
+  let input;
   let t10;
   let t11;
   let button;
@@ -64512,7 +64321,7 @@ function create_fragment$R(ctx) {
       ctx[2]}`)} Section`;
       t9 = space();
       div2 = element("div");
-      input2 = element("input");
+      input = element("input");
       t10 = space();
       if_block.c();
       t11 = space();
@@ -64522,10 +64331,10 @@ function create_fragment$R(ctx) {
       set_style(div0, "font-size", "1.3em");
       attr(label1, "for", "");
       set_style(div1, "margin-top", "1em");
-      attr(input2, "type", "text");
-      set_style(input2, "width", "25em");
-      set_style(input2, "margin", "auto");
-      set_style(input2, "border-radius", "1em");
+      attr(input, "type", "text");
+      set_style(input, "width", "25em");
+      set_style(input, "margin", "auto");
+      set_style(input, "border-radius", "1em");
       attr(button, "class", button_class_value = "aa-copySubmitButton " + /*checkAutorec*/
       (ctx[1] ? "aa-disableOpacity" : "") + " svelte-auto-ef9uc6");
       attr(div3, "class", "aa-CopyToAutorec svelte-auto-ef9uc6");
@@ -64544,9 +64353,9 @@ function create_fragment$R(ctx) {
       append(div1, label1);
       append(div3, t9);
       append(div3, div2);
-      append(div2, input2);
+      append(div2, input);
       set_input_value(
-        input2,
+        input,
         /*nameToAdd*/
         ctx[0]
       );
@@ -64558,7 +64367,7 @@ function create_fragment$R(ctx) {
       if (!mounted) {
         dispose = [
           listen(
-            input2,
+            input,
             "input",
             /*input_input_handler*/
             ctx[6]
@@ -64575,10 +64384,10 @@ function create_fragment$R(ctx) {
     },
     p(ctx2, [dirty]) {
       if (dirty & /*nameToAdd*/
-      1 && input2.value !== /*nameToAdd*/
+      1 && input.value !== /*nameToAdd*/
       ctx2[0]) {
         set_input_value(
-          input2,
+          input,
           /*nameToAdd*/
           ctx2[0]
         );
@@ -66250,7 +66059,7 @@ function instance$K($$self, $$props, $$invalidate) {
     efx: ripple(),
     title: "autoanimations.menus.add"
   };
-  const input2 = {
+  const input = {
     store: category.filterSearch,
     efx: rippleFocus(),
     placeholder: "autoanimations.menus.search",
@@ -66291,7 +66100,7 @@ function instance$K($$self, $$props, $$invalidate) {
     category,
     menu,
     buttonAdd,
-    input2,
+    input,
     buttonSort,
     buttonOverflow,
     addEntry,
@@ -66482,7 +66291,7 @@ function get_each_context$8(ctx, list, i) {
 }
 function create_each_block$8(ctx) {
   let div;
-  let input2;
+  let input;
   let t;
   let tjsiconbutton;
   let current;
@@ -66490,7 +66299,7 @@ function create_each_block$8(ctx) {
   let dispose;
   function input_input_handler() {
     ctx[7].call(
-      input2,
+      input,
       /*each_value*/
       ctx[16],
       /*i*/
@@ -66516,17 +66325,17 @@ function create_each_block$8(ctx) {
   return {
     c() {
       div = element("div");
-      input2 = element("input");
+      input = element("input");
       t = space();
       create_component(tjsiconbutton.$$.fragment);
-      attr(input2, "type", "text");
+      attr(input, "type", "text");
       attr(div, "class", "flexrow");
     },
     m(target2, anchor) {
       insert(target2, div, anchor);
-      append(div, input2);
+      append(div, input);
       set_input_value(
-        input2,
+        input,
         /*term*/
         ctx[15]
       );
@@ -66534,17 +66343,17 @@ function create_each_block$8(ctx) {
       mount_component(tjsiconbutton, div, null);
       current = true;
       if (!mounted) {
-        dispose = listen(input2, "input", input_input_handler);
+        dispose = listen(input, "input", input_input_handler);
         mounted = true;
       }
     },
     p(new_ctx, dirty) {
       ctx = new_ctx;
       if (dirty & /*$animation*/
-      2 && input2.value !== /*term*/
+      2 && input.value !== /*term*/
       ctx[15]) {
         set_input_value(
-          input2,
+          input,
           /*term*/
           ctx[15]
         );
@@ -68040,33 +67849,33 @@ function create_default_slot$i(ctx) {
 }
 function create_summary_end_slot$f(ctx) {
   let div;
-  let input2;
+  let input;
   let mounted;
   let dispose;
   return {
     c() {
       div = element("div");
-      input2 = element("input");
-      attr(input2, "type", "checkbox");
-      set_style(input2, "align-self", "center");
-      attr(input2, "title", "Toggle Target FX On/Off");
+      input = element("input");
+      attr(input, "type", "checkbox");
+      set_style(input, "align-self", "center");
+      attr(input, "title", "Toggle Target FX On/Off");
       attr(div, "slot", "summary-end");
     },
     m(target2, anchor) {
       insert(target2, div, anchor);
-      append(div, input2);
-      input2.checked = /*$animation*/
+      append(div, input);
+      input.checked = /*$animation*/
       ctx[0].target.enable;
       if (!mounted) {
         dispose = [
           listen(
-            input2,
+            input,
             "change",
             /*input_change_handler*/
             ctx[7]
           ),
           listen(
-            input2,
+            input,
             "change",
             /*change_handler*/
             ctx[8]
@@ -68078,7 +67887,7 @@ function create_summary_end_slot$f(ctx) {
     p(ctx2, dirty) {
       if (dirty & /*$animation*/
       1) {
-        input2.checked = /*$animation*/
+        input.checked = /*$animation*/
         ctx2[0].target.enable;
       }
     },
@@ -69491,22 +69300,22 @@ function create_default_slot$g(ctx) {
 }
 function create_summary_end_slot$d(ctx) {
   let div;
-  let input2;
+  let input;
   let mounted;
   let dispose;
   return {
     c() {
       div = element("div");
-      input2 = element("input");
-      attr(input2, "type", "checkbox");
-      set_style(input2, "align-self", "center");
-      attr(input2, "title", "Toggle Sound On/Off");
+      input = element("input");
+      attr(input, "type", "checkbox");
+      set_style(input, "align-self", "center");
+      attr(input, "title", "Toggle Sound On/Off");
       attr(div, "slot", "summary-end");
     },
     m(target2, anchor) {
       insert(target2, div, anchor);
-      append(div, input2);
-      input2.checked = /*$animation*/
+      append(div, input);
+      input.checked = /*$animation*/
       ctx[2][
         /*section*/
         ctx[0]
@@ -69517,13 +69326,13 @@ function create_summary_end_slot$d(ctx) {
       if (!mounted) {
         dispose = [
           listen(
-            input2,
+            input,
             "change",
             /*input_change_handler*/
             ctx[9]
           ),
           listen(
-            input2,
+            input,
             "change",
             /*change_handler*/
             ctx[10]
@@ -69535,7 +69344,7 @@ function create_summary_end_slot$d(ctx) {
     p(ctx2, dirty) {
       if (dirty & /*$animation, section, section02*/
       7) {
-        input2.checked = /*$animation*/
+        input.checked = /*$animation*/
         ctx2[2][
           /*section*/
           ctx2[0]
@@ -72574,26 +72383,26 @@ function create_default_slot$e(ctx) {
 }
 function create_summary_end_slot$b(ctx) {
   let div;
-  let input2;
+  let input;
   let mounted;
   let dispose;
   return {
     c() {
       div = element("div");
-      input2 = element("input");
-      attr(input2, "type", "checkbox");
-      set_style(input2, "align-self", "center");
-      attr(input2, "title", "Toggle Secondary On/Off");
+      input = element("input");
+      attr(input, "type", "checkbox");
+      set_style(input, "align-self", "center");
+      attr(input, "title", "Toggle Secondary On/Off");
       attr(div, "slot", "summary-end");
     },
     m(target2, anchor) {
       insert(target2, div, anchor);
-      append(div, input2);
-      input2.checked = /*$animation*/
+      append(div, input);
+      input.checked = /*$animation*/
       ctx[0].levels3d.secondary.enable;
       if (!mounted) {
         dispose = listen(
-          input2,
+          input,
           "change",
           /*input_change_handler*/
           ctx[8]
@@ -72604,7 +72413,7 @@ function create_summary_end_slot$b(ctx) {
     p(ctx2, dirty) {
       if (dirty & /*$animation, Object, pEffects*/
       9) {
-        input2.checked = /*$animation*/
+        input.checked = /*$animation*/
         ctx2[0].levels3d.secondary.enable;
       }
     },
@@ -73405,26 +73214,26 @@ function create_default_slot$d(ctx) {
 }
 function create_summary_end_slot$a(ctx) {
   let div;
-  let input2;
+  let input;
   let mounted;
   let dispose;
   return {
     c() {
       div = element("div");
-      input2 = element("input");
-      attr(input2, "type", "checkbox");
-      set_style(input2, "align-self", "center");
-      attr(input2, "title", "Toggle Secondary On/Off");
+      input = element("input");
+      attr(input, "type", "checkbox");
+      set_style(input, "align-self", "center");
+      attr(input, "title", "Toggle Secondary On/Off");
       attr(div, "slot", "summary-end");
     },
     m(target2, anchor) {
       insert(target2, div, anchor);
-      append(div, input2);
-      input2.checked = /*$animation*/
+      append(div, input);
+      input.checked = /*$animation*/
       ctx[0].levels3d.tokens.enable;
       if (!mounted) {
         dispose = listen(
-          input2,
+          input,
           "change",
           /*input_change_handler*/
           ctx[5]
@@ -73435,7 +73244,7 @@ function create_summary_end_slot$a(ctx) {
     p(ctx2, dirty) {
       if (dirty & /*$animation, Object, tokenAnimations*/
       17) {
-        input2.checked = /*$animation*/
+        input.checked = /*$animation*/
         ctx2[0].levels3d.tokens.enable;
       }
     },
@@ -73691,7 +73500,7 @@ function create_if_block_1$4(ctx) {
   let label;
   let t1;
   let td1;
-  let input2;
+  let input;
   let t2;
   let td2;
   let i;
@@ -73707,7 +73516,7 @@ function create_if_block_1$4(ctx) {
       label.textContent = `${localize("autoanimations.menus.sprite")}`;
       t1 = space();
       td1 = element("td");
-      input2 = element("input");
+      input = element("input");
       t2 = space();
       td2 = element("td");
       i = element("i");
@@ -73716,12 +73525,12 @@ function create_if_block_1$4(ctx) {
       attr(div, "class", "flexrow");
       set_style(td0, "width", "6em");
       set_style(td0, "border", "none");
-      attr(input2, "type", "text");
-      set_style(input2, "font-weight", "normal");
-      set_style(input2, "font-size", "small");
-      set_style(input2, "border-radius", "5px");
-      set_style(input2, "text-align", "left");
-      set_style(input2, "width", "100%");
+      attr(input, "type", "text");
+      set_style(input, "font-weight", "normal");
+      set_style(input, "font-size", "small");
+      set_style(input, "border-radius", "5px");
+      set_style(input, "text-align", "left");
+      set_style(input, "width", "100%");
       set_style(td1, "border", "none");
       attr(i, "class", "fas fa-file-import");
       attr(i, "title", "File Picker");
@@ -73739,9 +73548,9 @@ function create_if_block_1$4(ctx) {
       append(div, label);
       append(tr, t1);
       append(tr, td1);
-      append(td1, input2);
+      append(td1, input);
       set_input_value(
-        input2,
+        input,
         /*$animation*/
         ctx[0].levels3d.data.spritePath
       );
@@ -73751,7 +73560,7 @@ function create_if_block_1$4(ctx) {
       if (!mounted) {
         dispose = [
           listen(
-            input2,
+            input,
             "input",
             /*input_input_handler*/
             ctx[12]
@@ -73766,10 +73575,10 @@ function create_if_block_1$4(ctx) {
     },
     p(ctx2, dirty) {
       if (dirty & /*$animation, Object, pEffects*/
-      65 && input2.value !== /*$animation*/
+      65 && input.value !== /*$animation*/
       ctx2[0].levels3d.data.spritePath) {
         set_input_value(
-          input2,
+          input,
           /*$animation*/
           ctx2[0].levels3d.data.spritePath
         );
@@ -73871,7 +73680,7 @@ function create_fragment$B(ctx) {
   let label0;
   let t4;
   let t5;
-  let input2;
+  let input;
   let t6;
   let td1;
   let div1;
@@ -73947,7 +73756,7 @@ function create_fragment$B(ctx) {
       label0 = element("label");
       t4 = text("Enable");
       t5 = space();
-      input2 = element("input");
+      input = element("input");
       t6 = space();
       td1 = element("td");
       div1 = element("div");
@@ -73979,10 +73788,10 @@ function create_fragment$B(ctx) {
       attr(label0, "for", "Canvas3D " + /*animation*/
       ctx[3]._data.id);
       attr(label0, "class", "svelte-auto-bvaskx");
-      attr(input2, "type", "checkbox");
-      set_style(input2, "position", "relative");
-      set_style(input2, "left", "-10px");
-      attr(input2, "id", "Canvas3D " + /*animation*/
+      attr(input, "type", "checkbox");
+      set_style(input, "position", "relative");
+      set_style(input, "left", "-10px");
+      attr(input, "id", "Canvas3D " + /*animation*/
       ctx[3]._data.id);
       attr(div0, "class", "flexrow");
       set_style(td0, "width", "20%");
@@ -74023,8 +73832,8 @@ function create_fragment$B(ctx) {
       append(div0, label0);
       append(label0, t4);
       append(div0, t5);
-      append(div0, input2);
-      input2.checked = /*$animation*/
+      append(div0, input);
+      input.checked = /*$animation*/
       ctx[0].levels3d.enable;
       append(table, t6);
       append(table, td1);
@@ -74062,7 +73871,7 @@ function create_fragment$B(ctx) {
       if (!mounted) {
         dispose = [
           listen(
-            input2,
+            input,
             "change",
             /*input_change_handler*/
             ctx[9]
@@ -74086,7 +73895,7 @@ function create_fragment$B(ctx) {
     p(ctx2, [dirty]) {
       if (dirty & /*$animation, Object, pEffects*/
       65) {
-        input2.checked = /*$animation*/
+        input.checked = /*$animation*/
         ctx2[0].levels3d.enable;
       }
       if (dirty & /*localize, Object, pEffects*/
@@ -74668,7 +74477,7 @@ function create_if_block$9(ctx) {
   let t2_value = localize("autoanimations.menus.source") + "";
   let t2;
   let t3;
-  let input2;
+  let input;
   let mounted;
   let dispose;
   return {
@@ -74680,11 +74489,11 @@ function create_if_block$9(ctx) {
       t1 = space();
       t2 = text(t2_value);
       t3 = space();
-      input2 = element("input");
+      input = element("input");
       attr(label, "for", "TempSource " + /*animation*/
       ctx[3]._data.id);
-      attr(input2, "type", "checkbox");
-      attr(input2, "id", "TempSource " + /*animation*/
+      attr(input, "type", "checkbox");
+      attr(input, "id", "TempSource " + /*animation*/
       ctx[3]._data.id);
     },
     m(target2, anchor) {
@@ -74695,12 +74504,12 @@ function create_if_block$9(ctx) {
       append(label, t1);
       append(label, t2);
       append(div, t3);
-      append(div, input2);
-      input2.checked = /*$animation*/
+      append(div, input);
+      input.checked = /*$animation*/
       ctx[0].primary.options.animationSource;
       if (!mounted) {
         dispose = listen(
-          input2,
+          input,
           "change",
           /*input_change_handler*/
           ctx[14]
@@ -74711,7 +74520,7 @@ function create_if_block$9(ctx) {
     p(ctx2, dirty) {
       if (dirty & /*$animation*/
       1) {
-        input2.checked = /*$animation*/
+        input.checked = /*$animation*/
         ctx2[0].primary.options.animationSource;
       }
     },
@@ -76270,7 +76079,7 @@ function create_if_block$8(ctx) {
       )
         add_render_callback(() => (
           /*select_change_handler_1*/
-          ctx[18].call(select)
+          ctx[19].call(select)
         ));
       attr(div0, "class", "flexcol");
       attr(label1, "for", "aaOpacity");
@@ -76334,25 +76143,25 @@ function create_if_block$8(ctx) {
             select,
             "change",
             /*select_change_handler_1*/
-            ctx[18]
+            ctx[19]
           ),
           listen(
             input0,
             "input",
             /*input0_input_handler*/
-            ctx[19]
+            ctx[20]
           ),
           listen(
             input1,
             "change",
             /*input1_change_input_handler*/
-            ctx[20]
+            ctx[21]
           ),
           listen(
             input1,
             "input",
             /*input1_change_input_handler*/
-            ctx[20]
+            ctx[21]
           )
         ];
         mounted = true;
@@ -76464,33 +76273,39 @@ function create_default_slot$9(ctx) {
   let t23;
   let tr4;
   let td12;
+  let div7;
+  let label5;
+  let t24_value = localize("autoanimations.variants.xray") + "";
   let t24;
+  let t25;
+  let input5;
+  let t26;
   let td13;
   let waitdelay;
-  let t25;
+  let t27;
   let td14;
-  let t26;
+  let t28;
   let table1;
   let tr5;
   let td15;
-  let div7;
-  let label5;
-  let t27_value = localize("autoanimations.menus.persistant") + "";
-  let t27;
-  let t28;
-  let input5;
-  let t29;
-  let td16;
-  let div10;
   let div8;
   let label6;
-  let t33;
+  let t29_value = localize("autoanimations.menus.persistant") + "";
+  let t29;
+  let t30;
+  let input6;
+  let t31;
+  let td16;
+  let div11;
   let div9;
+  let label7;
+  let t35;
+  let div10;
   let select;
   let option0;
   let option1;
-  let div10_class_value;
-  let t36;
+  let div11_class_value;
+  let t38;
   let current;
   let mounted;
   let dispose;
@@ -76658,29 +76473,34 @@ function create_default_slot$9(ctx) {
       t23 = space();
       tr4 = element("tr");
       td12 = element("td");
-      t24 = space();
+      div7 = element("div");
+      label5 = element("label");
+      t24 = text(t24_value);
+      t25 = space();
+      input5 = element("input");
+      t26 = space();
       td13 = element("td");
       create_component(waitdelay.$$.fragment);
-      t25 = space();
+      t27 = space();
       td14 = element("td");
-      t26 = space();
+      t28 = space();
       table1 = element("table");
       tr5 = element("tr");
       td15 = element("td");
-      div7 = element("div");
-      label5 = element("label");
-      t27 = text(t27_value);
-      t28 = space();
-      input5 = element("input");
-      t29 = space();
-      td16 = element("td");
-      div10 = element("div");
       div8 = element("div");
       label6 = element("label");
-      label6.textContent = `${localize("autoanimations.menus.persistant")} 
-                            ${localize("autoanimations.menus.type")}`;
-      t33 = space();
+      t29 = text(t29_value);
+      t30 = space();
+      input6 = element("input");
+      t31 = space();
+      td16 = element("td");
+      div11 = element("div");
       div9 = element("div");
+      label7 = element("label");
+      label7.textContent = `${localize("autoanimations.menus.persistant")} 
+                            ${localize("autoanimations.menus.type")}`;
+      t35 = space();
+      div10 = element("div");
       select = element("select");
       option0 = element("option");
       option0.textContent = `${localize("autoanimations.menus.sequencereffect")}`;
@@ -76688,7 +76508,7 @@ function create_default_slot$9(ctx) {
       option1.textContent = `${localize("autoanimations.menus.attachtotemplate")}`;
       if (if_block0)
         if_block0.c();
-      t36 = space();
+      t38 = space();
       if (if_block1)
         if_block1.c();
       attr(label0, "for", "Masked " + /*animation*/
@@ -76719,13 +76539,18 @@ function create_default_slot$9(ctx) {
         /*defaultAnchor*/
         ctx[3]
       );
-      attr(table0, "class", "d");
-      attr(label5, "for", "Persist " + /*animation*/
+      attr(label5, "for", "xray " + /*animation*/
       ctx[6]._data.id);
       attr(input5, "type", "checkbox");
-      attr(input5, "id", "Persist " + /*animation*/
+      attr(input5, "id", "xray " + /*animation*/
       ctx[6]._data.id);
-      attr(label6, "for", "");
+      attr(table0, "class", "d");
+      attr(label6, "for", "Persist " + /*animation*/
+      ctx[6]._data.id);
+      attr(input6, "type", "checkbox");
+      attr(input6, "id", "Persist " + /*animation*/
+      ctx[6]._data.id);
+      attr(label7, "for", "");
       option0.__value = "sequencerground";
       option0.value = option0.__value;
       option1.__value = "attachtemplate";
@@ -76738,9 +76563,9 @@ function create_default_slot$9(ctx) {
       )
         add_render_callback(() => (
           /*select_change_handler*/
-          ctx[17].call(select)
+          ctx[18].call(select)
         ));
-      attr(div10, "class", div10_class_value = !/*persistent*/
+      attr(div11, "class", div11_class_value = !/*persistent*/
       ctx[1] ? "aa-disableOpacity" : "");
       attr(table1, "class", "d");
     },
@@ -76826,30 +76651,37 @@ function create_default_slot$9(ctx) {
       append(table0, t23);
       append(table0, tr4);
       append(tr4, td12);
-      append(tr4, t24);
+      append(td12, div7);
+      append(div7, label5);
+      append(label5, t24);
+      append(div7, t25);
+      append(div7, input5);
+      input5.checked = /*$animation*/
+      ctx[2].primary.options.xray;
+      append(tr4, t26);
       append(tr4, td13);
       mount_component(waitdelay, td13, null);
-      append(tr4, t25);
+      append(tr4, t27);
       append(tr4, td14);
-      insert(target2, t26, anchor);
+      insert(target2, t28, anchor);
       insert(target2, table1, anchor);
       append(table1, tr5);
       append(tr5, td15);
-      append(td15, div7);
-      append(div7, label5);
-      append(label5, t27);
-      append(div7, t28);
-      append(div7, input5);
-      input5.checked = /*$animation*/
-      ctx[2].primary.options.persistent;
-      append(tr5, t29);
-      append(tr5, td16);
-      append(td16, div10);
-      append(div10, div8);
+      append(td15, div8);
       append(div8, label6);
-      append(div10, t33);
-      append(div10, div9);
-      append(div9, select);
+      append(label6, t29);
+      append(div8, t30);
+      append(div8, input6);
+      input6.checked = /*$animation*/
+      ctx[2].primary.options.persistent;
+      append(tr5, t31);
+      append(tr5, td16);
+      append(td16, div11);
+      append(div11, div9);
+      append(div9, label7);
+      append(div11, t35);
+      append(div11, div10);
+      append(div10, select);
       append(select, option0);
       append(select, option1);
       if (if_block0)
@@ -76860,7 +76692,7 @@ function create_default_slot$9(ctx) {
         ctx[2].primary.options.persistType,
         true
       );
-      append(table1, t36);
+      append(table1, t38);
       if (if_block1)
         if_block1.m(table1, null);
       current = true;
@@ -76903,10 +76735,16 @@ function create_default_slot$9(ctx) {
             ctx[16]
           ),
           listen(
+            input6,
+            "change",
+            /*input6_change_handler*/
+            ctx[17]
+          ),
+          listen(
             select,
             "change",
             /*select_change_handler*/
-            ctx[17]
+            ctx[18]
           )
         ];
         mounted = true;
@@ -76975,6 +76813,11 @@ function create_default_slot$9(ctx) {
       if (dirty & /*$animation*/
       4) {
         input5.checked = /*$animation*/
+        ctx2[2].primary.options.xray;
+      }
+      if (dirty & /*$animation*/
+      4) {
+        input6.checked = /*$animation*/
         ctx2[2].primary.options.persistent;
       }
       if (
@@ -77002,9 +76845,9 @@ function create_default_slot$9(ctx) {
         );
       }
       if (!current || dirty & /*persistent*/
-      2 && div10_class_value !== (div10_class_value = !/*persistent*/
+      2 && div11_class_value !== (div11_class_value = !/*persistent*/
       ctx2[1] ? "aa-disableOpacity" : "")) {
-        attr(div10, "class", div10_class_value);
+        attr(div11, "class", div11_class_value);
       }
       if (
         /*persistType*/
@@ -77059,7 +76902,7 @@ function create_default_slot$9(ctx) {
       destroy_component(numberinput4);
       destroy_component(waitdelay);
       if (detaching)
-        detach(t26);
+        detach(t28);
       if (detaching)
         detach(table1);
       if (if_block0)
@@ -77146,7 +76989,7 @@ function create_fragment$x(ctx) {
     p(ctx2, [dirty]) {
       const tjssvgfolder_changes = {};
       if (dirty & /*$$scope, $animation, persistType, persistent, currentType, defaultAnchor, isAttached*/
-      2097215) {
+      4194367) {
         tjssvgfolder_changes.$$scope = { dirty, ctx: ctx2 };
       }
       tjssvgfolder.$set(tjssvgfolder_changes);
@@ -77220,6 +77063,10 @@ function instance$v($$self, $$props, $$invalidate) {
     animation.set($animation);
   }
   function input5_change_handler() {
+    $animation.primary.options.xray = this.checked;
+    animation.set($animation);
+  }
+  function input6_change_handler() {
     $animation.primary.options.persistent = this.checked;
     animation.set($animation);
   }
@@ -77283,6 +77130,7 @@ function instance$v($$self, $$props, $$invalidate) {
     input3_change_handler,
     input4_input_handler,
     input5_change_handler,
+    input6_change_handler,
     select_change_handler,
     select_change_handler_1,
     input0_input_handler,
@@ -82751,26 +82599,26 @@ function create_default_slot_2$1(ctx) {
 }
 function create_summary_end_slot_1$1(ctx) {
   let div;
-  let input2;
+  let input;
   let mounted;
   let dispose;
   return {
     c() {
       div = element("div");
-      input2 = element("input");
-      attr(input2, "type", "checkbox");
-      set_style(input2, "align-self", "center");
-      attr(input2, "title", "Toggle Source FX On/Off");
+      input = element("input");
+      attr(input, "type", "checkbox");
+      set_style(input, "align-self", "center");
+      attr(input, "title", "Toggle Source FX On/Off");
       attr(div, "slot", "summary-end");
     },
     m(target2, anchor) {
       insert(target2, div, anchor);
-      append(div, input2);
-      input2.checked = /*$animation*/
+      append(div, input);
+      input.checked = /*$animation*/
       ctx[0].data.preExplosion.enable;
       if (!mounted) {
         dispose = listen(
-          input2,
+          input,
           "change",
           /*input_change_handler*/
           ctx[15]
@@ -82781,7 +82629,7 @@ function create_summary_end_slot_1$1(ctx) {
     p(ctx2, dirty) {
       if (dirty[0] & /*$animation*/
       1) {
-        input2.checked = /*$animation*/
+        input.checked = /*$animation*/
         ctx2[0].data.preExplosion.enable;
       }
     },
@@ -83395,26 +83243,26 @@ function create_default_slot$6(ctx) {
 }
 function create_summary_end_slot$3(ctx) {
   let div;
-  let input2;
+  let input;
   let mounted;
   let dispose;
   return {
     c() {
       div = element("div");
-      input2 = element("input");
-      attr(input2, "type", "checkbox");
-      set_style(input2, "align-self", "center");
-      attr(input2, "title", "Toggle Source FX On/Off");
+      input = element("input");
+      attr(input, "type", "checkbox");
+      set_style(input, "align-self", "center");
+      attr(input, "title", "Toggle Source FX On/Off");
       attr(div, "slot", "summary-end");
     },
     m(target2, anchor) {
       insert(target2, div, anchor);
-      append(div, input2);
-      input2.checked = /*$animation*/
+      append(div, input);
+      input.checked = /*$animation*/
       ctx[0].data.afterImage.enable;
       if (!mounted) {
         dispose = listen(
-          input2,
+          input,
           "change",
           /*input_change_handler_1*/
           ctx[28]
@@ -83425,7 +83273,7 @@ function create_summary_end_slot$3(ctx) {
     p(ctx2, dirty) {
       if (dirty[0] & /*$animation*/
       1) {
-        input2.checked = /*$animation*/
+        input.checked = /*$animation*/
         ctx2[0].data.afterImage.enable;
       }
     },
@@ -83932,7 +83780,7 @@ function create_fragment$l(ctx) {
   let label2_class_value;
   let t5;
   let div1;
-  let input2;
+  let input;
   let div2_class_value;
   let mounted;
   let dispose;
@@ -83956,7 +83804,7 @@ function create_fragment$l(ctx) {
       );
       t5 = space();
       div1 = element("div");
-      input2 = element("input");
+      input = element("input");
       attr(label0, "for", "");
       attr(label0, "class", label0_class_value = "aaLabelBorder " + (!/*isRadius*/
       ctx[6] ? "aaIsSelected" : "aaNotSelected") + " svelte-auto-136pjjz");
@@ -83966,15 +83814,15 @@ function create_fragment$l(ctx) {
       attr(label2, "class", label2_class_value = "aaLabelBorder " + /*isRadius*/
       (ctx[6] ? "aaIsSelected" : "aaNotSelected") + " svelte-auto-136pjjz");
       attr(label2, "role", "presentation");
-      attr(input2, "type", "number");
+      attr(input, "type", "number");
       attr(
-        input2,
+        input,
         "placeholder",
         /*placeholder*/
         ctx[3]
       );
       attr(
-        input2,
+        input,
         "step",
         /*step*/
         ctx[4]
@@ -83996,9 +83844,9 @@ function create_fragment$l(ctx) {
       append(label2, t4);
       append(div2, t5);
       append(div2, div1);
-      append(div1, input2);
+      append(div1, input);
       set_input_value(
-        input2,
+        input,
         /*$animation*/
         ctx[5].data[
           /*section*/
@@ -84023,7 +83871,7 @@ function create_fragment$l(ctx) {
             ctx[13]
           ),
           listen(
-            input2,
+            input,
             "input",
             /*input_input_handler*/
             ctx[14]
@@ -84046,7 +83894,7 @@ function create_fragment$l(ctx) {
       if (dirty & /*placeholder*/
       8) {
         attr(
-          input2,
+          input,
           "placeholder",
           /*placeholder*/
           ctx2[3]
@@ -84055,14 +83903,14 @@ function create_fragment$l(ctx) {
       if (dirty & /*step*/
       16) {
         attr(
-          input2,
+          input,
           "step",
           /*step*/
           ctx2[4]
         );
       }
       if (dirty & /*$animation, section, field*/
-      35 && to_number(input2.value) !== /*$animation*/
+      35 && to_number(input.value) !== /*$animation*/
       ctx2[5].data[
         /*section*/
         ctx2[0]
@@ -84071,7 +83919,7 @@ function create_fragment$l(ctx) {
         ctx2[1]
       ]) {
         set_input_value(
-          input2,
+          input,
           /*$animation*/
           ctx2[5].data[
             /*section*/
@@ -84577,26 +84425,26 @@ function create_default_slot_4(ctx) {
 }
 function create_summary_end_slot_2(ctx) {
   let div;
-  let input2;
+  let input;
   let mounted;
   let dispose;
   return {
     c() {
       div = element("div");
-      input2 = element("input");
-      attr(input2, "type", "checkbox");
-      set_style(input2, "align-self", "center");
-      attr(input2, "title", "Toggle Source FX On/Off");
+      input = element("input");
+      attr(input, "type", "checkbox");
+      set_style(input, "align-self", "center");
+      attr(input, "title", "Toggle Source FX On/Off");
       attr(div, "slot", "summary-end");
     },
     m(target2, anchor) {
       insert(target2, div, anchor);
-      append(div, input2);
-      input2.checked = /*$animation*/
+      append(div, input);
+      input.checked = /*$animation*/
       ctx[0].data.start.enable;
       if (!mounted) {
         dispose = listen(
-          input2,
+          input,
           "change",
           /*input_change_handler*/
           ctx[19]
@@ -84607,7 +84455,7 @@ function create_summary_end_slot_2(ctx) {
     p(ctx2, dirty) {
       if (dirty[0] & /*$animation*/
       1) {
-        input2.checked = /*$animation*/
+        input.checked = /*$animation*/
         ctx2[0].data.start.enable;
       }
     },
@@ -84869,26 +84717,26 @@ function create_default_slot_2(ctx) {
 }
 function create_summary_end_slot_1(ctx) {
   let div;
-  let input2;
+  let input;
   let mounted;
   let dispose;
   return {
     c() {
       div = element("div");
-      input2 = element("input");
-      attr(input2, "type", "checkbox");
-      set_style(input2, "align-self", "center");
-      attr(input2, "title", "Toggle Source FX On/Off");
+      input = element("input");
+      attr(input, "type", "checkbox");
+      set_style(input, "align-self", "center");
+      attr(input, "title", "Toggle Source FX On/Off");
       attr(div, "slot", "summary-end");
     },
     m(target2, anchor) {
       insert(target2, div, anchor);
-      append(div, input2);
-      input2.checked = /*$animation*/
+      append(div, input);
+      input.checked = /*$animation*/
       ctx[0].data.between.enable;
       if (!mounted) {
         dispose = listen(
-          input2,
+          input,
           "change",
           /*input_change_handler_1*/
           ctx[25]
@@ -84899,7 +84747,7 @@ function create_summary_end_slot_1(ctx) {
     p(ctx2, dirty) {
       if (dirty[0] & /*$animation*/
       1) {
-        input2.checked = /*$animation*/
+        input.checked = /*$animation*/
         ctx2[0].data.between.enable;
       }
     },
@@ -85309,26 +85157,26 @@ function create_default_slot$5(ctx) {
 }
 function create_summary_end_slot$2(ctx) {
   let div;
-  let input2;
+  let input;
   let mounted;
   let dispose;
   return {
     c() {
       div = element("div");
-      input2 = element("input");
-      attr(input2, "type", "checkbox");
-      set_style(input2, "align-self", "center");
-      attr(input2, "title", "Toggle Source FX On/Off");
+      input = element("input");
+      attr(input, "type", "checkbox");
+      set_style(input, "align-self", "center");
+      attr(input, "title", "Toggle Source FX On/Off");
       attr(div, "slot", "summary-end");
     },
     m(target2, anchor) {
       insert(target2, div, anchor);
-      append(div, input2);
-      input2.checked = /*$animation*/
+      append(div, input);
+      input.checked = /*$animation*/
       ctx[0].data.end.enable;
       if (!mounted) {
         dispose = listen(
-          input2,
+          input,
           "change",
           /*input_change_handler_2*/
           ctx[28]
@@ -85339,7 +85187,7 @@ function create_summary_end_slot$2(ctx) {
     p(ctx2, dirty) {
       if (dirty[0] & /*$animation*/
       1) {
-        input2.checked = /*$animation*/
+        input.checked = /*$animation*/
         ctx2[0].data.end.enable;
       }
     },
@@ -87736,7 +87584,7 @@ function instance$e($$self, $$props, $$invalidate) {
     options: { chevronOnly: true },
     store: animation.stores.folderOpen
   };
-  const input2 = {
+  const input = {
     store: animation.stores.label,
     efx: rippleFocus(),
     placeholder: "autoanimations.menus.itemName",
@@ -87776,7 +87624,7 @@ function instance$e($$self, $$props, $$invalidate) {
     idx,
     exactMatchButton,
     folder,
-    input2,
+    input,
     menu,
     excludedTerms,
     isExactMatch,
@@ -89410,6 +89258,61 @@ class AAGameSettings extends TJSGameSettings {
           });
         }
         break;
+      case "ars":
+        settings.push({
+          namespace,
+          key: "EnableCritical",
+          folder: game.system.title || game.system.name,
+          options: {
+            name: "autoanimations.settings.crithit_name",
+            hint: "autoanimations.settings.crithit_hint",
+            scope: scope.world,
+            type: Boolean,
+            default: false,
+            config: true
+          }
+        });
+        settings.push({
+          namespace,
+          key: "CriticalAnimation",
+          folder: game.system.title || game.system.name,
+          options: {
+            name: "autoanimations.settings.crithitAnim_name",
+            //name: 'Choose A File',
+            scope: scope.world,
+            config: true,
+            type: String,
+            default: "",
+            filePicker: "imagevideo"
+          }
+        });
+        settings.push({
+          namespace,
+          key: "EnableCriticalMiss",
+          folder: game.system.title || game.system.name,
+          options: {
+            name: "autoanimations.settings.critmiss_name",
+            hint: "autoanimations.settings.critmiss_hint",
+            scope: scope.world,
+            type: Boolean,
+            default: false,
+            config: true
+          }
+        });
+        settings.push({
+          namespace,
+          key: "CriticalMissAnimation",
+          folder: game.system.title || game.system.name,
+          options: {
+            name: "autoanimations.settings.critmissAnim_name",
+            scope: scope.world,
+            config: true,
+            type: String,
+            default: "",
+            filePicker: "imagevideo"
+          }
+        });
+        break;
       case "pf2e":
         settings.push({
           namespace,
@@ -89588,6 +89491,24 @@ class AAGameSettings extends TJSGameSettings {
               onDamage: "autoanimations.settings.damage"
             },
             default: "onAttack",
+            config: true
+          }
+        });
+        break;
+      case "swade":
+        settings.push({
+          namespace,
+          key: "playtrigger",
+          folder: game.system.title || game.system.name,
+          options: {
+            name: "autoanimations.settings.playAnimations",
+            scope: scope.world,
+            type: String,
+            choices: {
+              onAttack: "autoanimations.settings.swadeTraitRolls",
+              onDamage: "autoanimations.settings.damage"
+            },
+            default: "onDamage",
             config: true
           }
         });
@@ -94334,14 +94255,28 @@ async function getRequiredData(data2) {
   if (!data2.token) {
     data2.token = _token;
   }
+  if (!data2.targets && data2.targetIds?.length) {
+    data2.targets = data2.targetIds.map((id) => canvas.scene.tokens.get(id)?.object).filter((x) => !!x);
+  }
   if (!data2.targets) {
     data2.targets = Array.from(game.user.targets);
   }
+  if (data2.ammoId && !data2.ammoItem && data2.token) {
+    data2.ammoItem = getItemFromToken(data2.token, data2.ammoId);
+  }
+  if (!data2.templateData && data2.templateDataId) {
+    data2.templateData = canvas.scene.templates.get(data2.templateDataId);
+  }
+  if (data2.templateData) {
+    data2.isTemplate = true;
+  }
+  data2.extraNames ||= [];
+  data2.overrideNames ||= [];
   return { ...data2 };
 }
 async function getItem(data2) {
-  let { item: item2, itemId, itemUuid, itemName, token, tokenId, tokenUuid, targets: targets2, actorId, actor } = data2;
-  return itemUuid ? await getItemFromUuid(itemUuid) : token && itemId ? getItemFromToken(token, itemId) : tokenId && itemId ? getItemFromTokenId(tokenId, itemId) : tokenUuid && itemId ? getItemFromTokenUuid(tokenUuid, itemId) : token && itemName ? getItemFromName(token, itemName) : itemId && (actorId || actor) ? await getItemFromCompiledUuid(itemId, actor, actorId) : itemId ? checkDeletedItems(itemId) || getItemFromIdBlind(itemId) : null;
+  let { item: item2, itemId: itemId2, itemUuid, itemName, token, tokenId, tokenUuid, targets: targets2, actorId: actorId2, actor } = data2;
+  return itemUuid ? await getItemFromUuid(itemUuid) : token && itemId2 ? getItemFromToken(token, itemId2) : tokenId && itemId2 ? getItemFromTokenId(tokenId, itemId2) : tokenUuid && itemId2 ? getItemFromTokenUuid(tokenUuid, itemId2) : token && itemName ? getItemFromName(token, itemName) : itemId2 && (actorId2 || actor) ? await getItemFromCompiledUuid(itemId2, actor, actorId2) : itemId2 ? checkDeletedItems(itemId2) || getItemFromIdBlind(itemId2) : null;
 }
 async function getItemFromUuid(uuid) {
   return await fromUuid(uuid) || checkDeletedItems(uuid);
@@ -94350,26 +94285,26 @@ function checkDeletedItems(id) {
   let idSplit = id.split(".");
   return aaDeletedItems.get(idSplit[idSplit.length - 1]) || false;
 }
-async function getItemFromCompiledUuid(itemId, actor, actorId) {
-  const idActor = actor ? actor.id : actorId;
-  return await fromUuid(`Actor.${idActor}.Item.${itemId}`);
+async function getItemFromCompiledUuid(itemId2, actor, actorId2) {
+  const idActor = actor ? actor.id : actorId2;
+  return await fromUuid(`Actor.${idActor}.Item.${itemId2}`);
 }
-function getItemFromToken(token, itemId) {
-  return token.actor?.items?.get(itemId);
+function getItemFromToken(token, itemId2) {
+  return token.actor?.items?.get(itemId2);
 }
-function getItemFromTokenId(tokenId, itemId) {
+function getItemFromTokenId(tokenId, itemId2) {
   let token = getTokenFromScene(tokenId) || getTokenFromCompiledUuid(tokenId);
   if (!token) {
     return;
   }
-  return getItemFromToken(token, itemId);
+  return getItemFromToken(token, itemId2);
 }
-function getItemFromTokenUuid(tokenUuid, itemId) {
+function getItemFromTokenUuid(tokenUuid, itemId2) {
   let token = getTokenFromUuid(tokenUuid);
   if (!token) {
     return;
   }
-  return getItemFromToken(token, itemId);
+  return getItemFromToken(token, itemId2);
 }
 function getItemFromName(token, name) {
   let items = Array.from(token.actor.items);
@@ -94385,8 +94320,8 @@ function getItemFromIdBlind(id) {
   }
 }
 function getToken(data2) {
-  let { item: item2, itemId, itemUuid, itemName, token, tokenId, tokenUuid, targets: targets2, actorId, actor } = data2;
-  return item2 ? item2.parent?.token ?? getTokenFromItemID(item2.id) : tokenUuid ? getTokenFromUuid(tokenUuid) : tokenId ? getTokenFromScene(tokenId) || getTokenFromCompiledUuid(tokenId) : itemId ? getTokenFromItemID(itemId) : actor || actorId ? getTokenFromActor(actor, actorId) : null;
+  let { item: item2, itemId: itemId2, itemUuid, itemName, token, tokenId, tokenUuid, targets: targets2, actorId: actorId2, actor } = data2;
+  return item2 ? item2.parent?.token ?? getTokenFromItemID(item2.id) : tokenUuid ? getTokenFromUuid(tokenUuid) : tokenId ? getTokenFromScene(tokenId) || getTokenFromCompiledUuid(tokenId) : itemId2 ? getTokenFromItemID(itemId2) : actor || actorId2 ? getTokenFromActor(actor, actorId2) : null;
 }
 function getTokenFromItemID(id) {
   let tokens = canvas.tokens.placeables.filter((token) => token.actor?.items?.get(id));
@@ -94402,8 +94337,8 @@ function getTokenFromUuid(uuid) {
 function getTokenFromCompiledUuid(id) {
   return fromUuidSync(`${canvas.scene.uuid}.Token.${id}`)?.object;
 }
-function getTokenFromActor(actor, actorId) {
-  let idActor = actor ? actor.id : actorId;
+function getTokenFromActor(actor, actorId2) {
+  let idActor = actor ? actor.id : actorId2;
   let foundActor = fromUuidSync(idActor);
   if (!foundActor) {
     return null;
@@ -94411,7 +94346,7 @@ function getTokenFromActor(actor, actorId) {
   let token = foundActor.getActiveTokens();
   return Array.isArray(token) ? token[0] : token;
 }
-function systemHooks$o() {
+function systemHooks$t() {
   if (game.modules.get("midi-qol")?.active) {
     Hooks.on("midi-qol.AttackRollComplete", (workflow) => {
       let playOnDamage = game.settings.get("autoanimations", "playonDamage");
@@ -94432,9 +94367,11 @@ function systemHooks$o() {
       if (workflow.item?.hasAreaTarget || workflow.item?.hasAttack || workflow.item?.hasDamage) {
         return;
       }
-      useItem$1(getWorkflowData$1(workflow));
+      useItem$2(getWorkflowData$1(workflow));
     });
-  } else {
+  } else if (game.modules.get("wire")?.active)
+    ;
+  else {
     Hooks.on("dnd5e.preRollAttack", async (item2, options2) => {
       let spellLevel = options2.spellLevel ?? void 0;
       Hooks.once("dnd5e.rollAttack", async (item3, roll) => {
@@ -94457,54 +94394,54 @@ function systemHooks$o() {
       if (item2?.hasAreaTarget || item2.hasAttack || item2.hasDamage) {
         return;
       }
-      useItem$1(await getRequiredData({ item: item2, actor: item2.actor, workflow: item2, useItemHook: { item: item2, config, options: options2 }, spellLevel: options2?.flags?.dnd5e?.use?.spellLevel || void 0 }));
+      useItem$2(await getRequiredData({ item: item2, actor: item2.actor, workflow: item2, useItemHook: { item: item2, config, options: options2 }, spellLevel: options2?.flags?.dnd5e?.use?.spellLevel || void 0 }));
     });
   }
   Hooks.on("createMeasuredTemplate", async (template, data2, userId) => {
     if (userId !== game.user.id) {
       return;
     }
-    templateAnimation$4(await getRequiredData({ itemUuid: template.flags?.dnd5e?.origin, templateData: template, workflow: template, isTemplate: true }));
+    templateAnimation$7(await getRequiredData({ itemUuid: template.flags?.dnd5e?.origin, templateData: template, workflow: template, isTemplate: true }));
   });
 }
-async function useItem$1(input2) {
+async function useItem$2(input) {
   debug$1("Item used, checking for animations");
-  const handler = await AAHandler.make(input2);
+  const handler = await AAHandler.make(input);
   if (!handler?.item || !handler?.sourceToken) {
     console.log("Automated Animations: No Item or Source Token", handler);
     return;
   }
   trafficCop$1(handler);
 }
-async function attack$1(input2) {
-  checkAmmo$2(input2);
-  checkReach$1(input2);
+async function attack$1(input) {
+  checkAmmo$2(input);
+  checkReach$1(input);
   debug$1("Attack rolled, checking for animations");
-  const handler = await AAHandler.make(input2);
+  const handler = await AAHandler.make(input);
   if (!handler?.item || !handler?.sourceToken) {
     console.log("Automated Animations: No Item or Source Token", handler);
     return;
   }
   trafficCop$1(handler);
 }
-async function damage$1(input2) {
-  checkAmmo$2(input2);
-  checkReach$1(input2);
+async function damage$1(input) {
+  checkAmmo$2(input);
+  checkReach$1(input);
   debug$1("Damage rolled, checking for animations");
-  const handler = await AAHandler.make(input2);
+  const handler = await AAHandler.make(input);
   if (!handler?.item || !handler?.sourceToken) {
     console.log("Automated Animations: No Item or Source Token", handler);
     return;
   }
   trafficCop$1(handler);
 }
-async function templateAnimation$4(input2) {
+async function templateAnimation$7(input) {
   debug$1("Template placed, checking for animations");
-  if (!input2.item) {
+  if (!input.item) {
     debug$1("No Item could be found");
     return;
   }
-  const handler = await AAHandler.make(input2);
+  const handler = await AAHandler.make(input);
   trafficCop$1(handler);
 }
 function checkAmmo$2(data2) {
@@ -94558,9 +94495,9 @@ function criticalCheck$1(workflow, item2 = {}) {
 }
 const aaDnd5e = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  systemHooks: systemHooks$o
+  systemHooks: systemHooks$t
 }, Symbol.toStringTag, { value: "Module" }));
-function systemHooks$n() {
+function systemHooks$s() {
   if (game.modules.get("midi-qol")?.active) {
     Hooks.on("midi-qol.AttackRollComplete", (workflow) => {
       let playOnDamage = game.settings.get("autoanimations", "playonDamage");
@@ -94581,7 +94518,7 @@ function systemHooks$n() {
       if (workflow.item?.hasAreaTarget || workflow.item?.hasAttack || workflow.item?.hasDamage) {
         return;
       }
-      useItem(getWorkflowData(workflow));
+      useItem$1(getWorkflowData(workflow));
     });
   } else {
     Hooks.on("sw5e.rollAttack", async (item2, roll) => {
@@ -94602,54 +94539,54 @@ function systemHooks$n() {
       if (item2?.hasAreaTarget || item2.hasAttack || item2.hasDamage) {
         return;
       }
-      useItem(await getRequiredData({ item: item2, actor: item2.actor, workflow: item2 }));
+      useItem$1(await getRequiredData({ item: item2, actor: item2.actor, workflow: item2 }));
     });
   }
   Hooks.on("createMeasuredTemplate", async (template, data2, userId) => {
     if (userId !== game.user.id) {
       return;
     }
-    templateAnimation$3(await getRequiredData({ itemUuid: template.flags?.sw5e?.origin, templateData: template, workflow: template, isTemplate: true }));
+    templateAnimation$6(await getRequiredData({ itemUuid: template.flags?.sw5e?.origin, templateData: template, workflow: template, isTemplate: true }));
   });
 }
-async function useItem(input2) {
+async function useItem$1(input) {
   debug$1("Item used, checking for animations");
-  const handler = await AAHandler.make(input2);
+  const handler = await AAHandler.make(input);
   if (!handler?.item || !handler?.sourceToken) {
     console.log("Automated Animations: No Item or Source Token", handler);
     return;
   }
   trafficCop$1(handler);
 }
-async function attack(input2) {
-  checkAmmo$1(input2);
-  checkReach(input2);
+async function attack(input) {
+  checkAmmo$1(input);
+  checkReach(input);
   debug$1("Attack rolled, checking for animations");
-  const handler = await AAHandler.make(input2);
+  const handler = await AAHandler.make(input);
   if (!handler?.item || !handler?.sourceToken) {
     console.log("Automated Animations: No Item or Source Token", handler);
     return;
   }
   trafficCop$1(handler);
 }
-async function damage(input2) {
-  checkAmmo$1(input2);
-  checkReach(input2);
+async function damage(input) {
+  checkAmmo$1(input);
+  checkReach(input);
   debug$1("Damage rolled, checking for animations");
-  const handler = await AAHandler.make(input2);
+  const handler = await AAHandler.make(input);
   if (!handler?.item || !handler?.sourceToken) {
     console.log("Automated Animations: No Item or Source Token", handler);
     return;
   }
   trafficCop$1(handler);
 }
-async function templateAnimation$3(input2) {
+async function templateAnimation$6(input) {
   debug$1("Template placed, checking for animations");
-  if (!input2.item) {
+  if (!input.item) {
     debug$1("No Item could be found");
     return;
   }
-  const handler = await AAHandler.make(input2);
+  const handler = await AAHandler.make(input);
   trafficCop$1(handler);
 }
 function checkAmmo$1(data2) {
@@ -94695,9 +94632,9 @@ function criticalCheck(workflow) {
 }
 const aaSw5e = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  systemHooks: systemHooks$n
+  systemHooks: systemHooks$s
 }, Symbol.toStringTag, { value: "Module" }));
-function systemHooks$m() {
+function systemHooks$r() {
   Hooks.on("DL.Action", async (data2) => {
     const eventType = data2.type;
     let compiledData = await getRequiredData({
@@ -94724,6 +94661,9 @@ function systemHooks$m() {
       if (game.settings.get("autoanimations", "playtrigger") === "applydamage") {
         return commonEventTypes.concat(["apply-damage"]).includes(eventType);
       }
+      if (game.settings.get("autoanimations", "playtrigger") === "rollattack") {
+        return commonEventTypes.concat(["roll-attack", "use-spell", "use-talent"]).includes(eventType);
+      }
       return commonEventTypes.concat(["roll-attack"]).includes(eventType);
     };
     if (eventType && !canRunAnimations()) {
@@ -94738,7 +94678,7 @@ async function runDemonlord(data2) {
 }
 const aaDemonlord = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  systemHooks: systemHooks$m
+  systemHooks: systemHooks$r
 }, Symbol.toStringTag, { value: "Module" }));
 const PF2E_SIZE_TO_REACH = {
   tiny: 0,
@@ -94748,7 +94688,7 @@ const PF2E_SIZE_TO_REACH = {
   huge: 10,
   grg: 15
 };
-function systemHooks$l() {
+function systemHooks$q() {
   Hooks.on("createChatMessage", async (msg) => {
     if (msg.user.id !== game.user.id) {
       return;
@@ -94772,37 +94712,47 @@ function systemHooks$l() {
       debug$1("No Item Found, exiting main Workflow");
       return;
     }
-    compiledData.hitTargets = checkOutcome(compiledData);
+    compiledData.hitTargets = checkOutcome$1(compiledData);
     runPF2e(compiledData);
   });
   Hooks.on("createMeasuredTemplate", async (template, data2, userId) => {
     if (userId !== game.user.id) {
       return;
     }
-    templateAnimation$2(await getRequiredData({
+    let compiledData = await getRequiredData({
       itemUuid: template.flags?.pf2e?.origin?.uuid,
       templateData: template,
       workflow: template,
       isTemplate: true
-    }));
+    });
+    if (template.item)
+      compiledData.item = template.item;
+    templateAnimation$5(compiledData);
   });
 }
-async function templateAnimation$2(input2) {
+async function templateAnimation$5(input) {
   debug$1("Template placed, checking for animations");
-  if (!input2.item) {
+  if (!input.item) {
     debug$1("No Item could be found");
     return;
   }
-  const templateName = input2.templateData.flags?.pf2e?.origin?.name;
-  if (templateName && input2.item.name !== templateName) {
-    const overlayId = input2.item.overlays.find((o) => o.name == templateName)?._id;
-    if (overlayId) {
-      input2.item = input2.item.loadVariant({ overlayIds: [overlayId] });
-      input2.isVariant = true;
-      input2.originalItem = input2.item?.original;
+  if (isNewerVersion(game.system.version, "5")) {
+    if (input.item.isVariant) {
+      input.isVariant = true;
+      input.originalItem = input.item.original;
+    }
+  } else {
+    const templateName = input.templateData.flags?.pf2e?.origin?.name;
+    if (templateName && input.item.name !== templateName) {
+      const overlayId = input.item.overlays.find((o) => o.name == templateName)?._id;
+      if (overlayId) {
+        input.item = input.item.loadVariant({ overlayIds: [overlayId] });
+        input.isVariant = true;
+        input.originalItem = input.item?.original;
+      }
     }
   }
-  const handler = await AAHandler.make(input2);
+  const handler = await AAHandler.make(input);
   trafficCop$1(handler);
 }
 async function runPF2e(data2) {
@@ -94868,6 +94818,10 @@ async function runPF2eSpells(data2) {
   msg.isDamageRoll;
   spellHasAttack(item2);
   const spellType = getSpellType(item2);
+  if (item2.isVariant) {
+    data2.isVariant = true;
+    data2.originalItem = item2.original;
+  }
   switch (spellType) {
     case "utility":
     case "save":
@@ -94899,20 +94853,20 @@ async function runPF2eSpells(data2) {
       break;
   }
 }
-async function playPF2e(input2) {
-  if (!input2.item) {
+async function playPF2e(input) {
+  if (!input.item) {
     debug$1("No Item could be found");
     return;
   }
-  if (input2.item.traits) {
-    const reachTrait = input2.item.traits.find((t) => /^reach-\d+$/.test(t));
-    let reachValue = reachTrait ? Number(reachTrait.replace("reach-", "")) : PF2E_SIZE_TO_REACH[input2.item.actor?.size ?? "med"];
-    if (!reachTrait && input2.item.traits.has("reach")) {
+  if (input.item.traits) {
+    const reachTrait = input.item.traits.find((t) => /^reach-\d+$/.test(t));
+    let reachValue = reachTrait ? Number(reachTrait.replace("reach-", "")) : PF2E_SIZE_TO_REACH[input.item.actor?.size ?? "med"];
+    if (!reachTrait && input.item.traits.has("reach")) {
       reachValue += 5;
     }
-    input2.reach = Math.round(reachValue / 5) - 1;
+    input.reach = Math.round(reachValue / 5) - 1;
   }
-  const handler = await AAHandler.make(input2);
+  const handler = await AAHandler.make(input);
   trafficCop$1(handler);
 }
 function getSpellType(item2) {
@@ -94928,26 +94882,26 @@ function itemHasDamage(item2) {
   let damage2 = item2.system?.damage?.value || item2.system?.damageRolls || {};
   return Object.keys(damage2).length;
 }
-function checkOutcome(input2) {
-  let outcome = input2.workflow.flags?.pf2e?.context?.outcome;
+function checkOutcome$1(input) {
+  let outcome = input.workflow.flags?.pf2e?.context?.outcome;
   outcome = outcome ? outcome.toLowerCase() : "";
   let hitTargets2;
-  if (input2.targets.length < 2 && !game.settings.get("autoanimations", "playonDamageCore") && outcome) {
+  if (input.targets.length < 2 && !game.settings.get("autoanimations", "playonDamageCore") && outcome) {
     if (outcome === "success" || outcome === "criticalsuccess") {
-      hitTargets2 = input2.targets;
+      hitTargets2 = input.targets;
     } else {
       hitTargets2 = false;
     }
   } else {
-    hitTargets2 = input2.targets;
+    hitTargets2 = input.targets;
   }
   return hitTargets2;
 }
 const aaPf2e = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  systemHooks: systemHooks$l
+  systemHooks: systemHooks$q
 }, Symbol.toStringTag, { value: "Module" }));
-function systemHooks$k() {
+function systemHooks$p() {
   Hooks.on("createChatMessage", async (msg) => {
     function extractItemId(content) {
       try {
@@ -94957,16 +94911,16 @@ function systemHooks$k() {
         return null;
       }
     }
-    const itemId = extractItemId(msg.content);
-    if (!itemId) {
+    const itemId2 = extractItemId(msg.content);
+    if (!itemId2) {
       return;
     }
     const tokenId = msg.speaker.token;
-    const sourceToken = canvas.tokens.get(tokenId) || canvas.tokens.placeables.find((token) => token.actor?.items?.get(itemId));
+    const sourceToken = canvas.tokens.get(tokenId) || canvas.tokens.placeables.find((token) => token.actor?.items?.get(itemId2));
     if (!sourceToken) {
       return;
     }
-    const item2 = sourceToken.actor?.items?.get(itemId);
+    const item2 = sourceToken.actor?.items?.get(itemId2);
     if (item2.type === "feat") {
       return;
     }
@@ -95010,11 +94964,11 @@ async function runStarfinder(data2) {
 }
 function funkyTest$1(msg) {
   let filterItemId = $(msg.content).filter(`[data-item-id]`);
-  let itemId = filterItemId?.[0]?.attributes?.["data-item-id"]?.value || filterItemId?.prevObject?.[0]?.attributes?.["data-item-id"]?.value;
-  if (!itemId) {
+  let itemId2 = filterItemId?.[0]?.attributes?.["data-item-id"]?.value || filterItemId?.prevObject?.[0]?.attributes?.["data-item-id"]?.value;
+  if (!itemId2) {
     const systemId = game.system.id;
     let flags = msg.flags;
-    itemId = flags.itemId ?? flags.ItemId ?? flags[systemId]?.itemId ?? flags[systemId]?.ItemId ?? msg.rolls?.[0]?.options?.itemId;
+    itemId2 = flags.itemId ?? flags.ItemId ?? flags[systemId]?.itemId ?? flags[systemId]?.ItemId ?? msg.rolls?.[0]?.options?.itemId;
   }
   let filterTokenId = $(msg.content).filter(`[data-token-id]`);
   let tokenId = filterTokenId?.[0]?.attributes?.["data-token-id"]?.value || filterTokenId?.prevObject?.[0]?.attributes?.["data-token-id"]?.value;
@@ -95023,16 +94977,20 @@ function funkyTest$1(msg) {
     tokenId = splitTokenId[splitTokenId.length - 1];
   }
   let filterActorId = $(msg.content).filter(`[data-actor-id]`);
-  let actorId = filterActorId?.[0]?.attributes?.["data-actor-id"]?.value || filterActorId?.prevObject?.[0]?.attributes?.["data-actor-id"]?.value;
-  return { itemId, tokenId, actorId };
+  let actorId2 = filterActorId?.[0]?.attributes?.["data-actor-id"]?.value || filterActorId?.prevObject?.[0]?.attributes?.["data-actor-id"]?.value;
+  return { itemId: itemId2, tokenId, actorId: actorId2 };
 }
 const aaSfrpg = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  systemHooks: systemHooks$k
+  systemHooks: systemHooks$p
 }, Symbol.toStringTag, { value: "Module" }));
-function systemHooks$j() {
-  Hooks.on("swadeAction", async (SwadeTokenOrActor, SwadeItem, SwadeAction) => {
-    if (SwadeAction === "damage" || SwadeAction === "formula" && !SwadeItem.system.damage) {
+function systemHooks$o() {
+  Hooks.on("swadeAction", async (SwadeTokenOrActor, SwadeItem, SwadeAction, SwadeRoll, userId) => {
+    if (!SwadeRoll) {
+      return;
+    }
+    const playtrigger = game.settings.get("autoanimations", "playtrigger");
+    if (SwadeAction === "damage" && playtrigger === "onDamage" || SwadeAction === "formula" && playtrigger === "onAttack") {
       const controlledTokens = canvas.tokens.controlled;
       let token;
       if (controlledTokens.length > 0) {
@@ -95043,6 +95001,23 @@ function systemHooks$j() {
       }
       runSwade(SwadeTokenOrActor, SwadeTokenOrActor, SwadeItem);
     }
+  });
+  Hooks.on("swadeConsumeItem", async (SwadeItem, charges, usage) => {
+    const controlledTokens = canvas.tokens.controlled;
+    let token;
+    let SwadeTokenOrActor = SwadeItem.parent;
+    if (controlledTokens.length > 0) {
+      token = controlledTokens.find((token2) => token2.document.actorId === SwadeTokenOrActor.id);
+    }
+    if (token) {
+      SwadeTokenOrActor = token;
+    }
+    runSwade(SwadeTokenOrActor, SwadeTokenOrActor, SwadeItem);
+  });
+  Hooks.on("createMeasuredTemplate", async (template, data2, userId) => {
+    if (userId !== game.user.id || !template.flags?.swade?.origin)
+      return;
+    templateAnimation$4(await getRequiredData({ itemUuid: template.flags?.swade?.origin, templateData: template, workflow: template, isTemplate: true }));
   });
   async function get_brsw_data(data2) {
     return { token: data2.token, actor: data2.actor, item: data2.item };
@@ -95068,6 +95043,15 @@ function systemHooks$j() {
     }
   });
 }
+async function templateAnimation$4(input) {
+  debug$1("Template placed, checking for animations");
+  if (!input.item) {
+    debug$1("No Item could be found");
+    return;
+  }
+  const handler = await AAHandler.make(input);
+  trafficCop$1(handler);
+}
 async function runSwade(token, actor, item2) {
   let data2 = await getRequiredData({ token, actor, item: item2 });
   if (!data2.item) {
@@ -95078,9 +95062,9 @@ async function runSwade(token, actor, item2) {
 }
 const aaSwade = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  systemHooks: systemHooks$j
+  systemHooks: systemHooks$o
 }, Symbol.toStringTag, { value: "Module" }));
-function systemHooks$i() {
+function systemHooks$n() {
   Hooks.on("wfrp4e:rollWeaponTest", async (data2, info) => {
     if (game.user.id !== info.user) {
       return;
@@ -95164,7 +95148,7 @@ function systemHooks$i() {
       return;
     }
     const uuid = template.flags.wfrp4e.itemuuid;
-    templateAnimation$1(await getRequiredData({ itemUuid: uuid, templateData: template, workflow: template, isTemplate: true }));
+    templateAnimation$3(await getRequiredData({ itemUuid: uuid, templateData: template, workflow: template, isTemplate: true }));
   });
 }
 async function runWarhammer(data2) {
@@ -95180,20 +95164,20 @@ function compileTargets(targets2) {
   }
   return Array.from(targets2).map((token) => canvas.tokens.get(token.token));
 }
-async function templateAnimation$1(input2) {
+async function templateAnimation$3(input) {
   debug$1("Template placed, checking for animations");
-  if (!input2.item) {
+  if (!input.item) {
     debug$1("No Item could be found");
     return;
   }
-  const handler = await AAHandler.make(input2);
+  const handler = await AAHandler.make(input);
   trafficCop$1(handler);
 }
 const aaWfrpg = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  systemHooks: systemHooks$i
+  systemHooks: systemHooks$n
 }, Symbol.toStringTag, { value: "Module" }));
-function systemHooks$h() {
+function systemHooks$m() {
   Hooks.on("createChatMessage", async (msg) => {
     if (msg.user.id !== game.user.id) {
       return;
@@ -95207,60 +95191,83 @@ function systemHooks$h() {
     runDcc(compiledData);
   });
 }
-async function runDcc(input2) {
+async function runDcc(input) {
   if (!game.settings.get("dcc", "useStandardDiceRoller")) {
-    const handler = await AAHandler.make(input2);
+    const handler = await AAHandler.make(input);
     trafficCop$1(handler);
-  } else if (input2.flags?.dcc?.RollType === "Damage" || input2.flags?.dcc?.RollType === "SpellCheck") {
-    const handler = await AAHandler.make(input2);
+  } else if (input.flags?.dcc?.RollType === "Damage" || input.flags?.dcc?.RollType === "SpellCheck") {
+    const handler = await AAHandler.make(input);
     trafficCop$1(handler);
   }
 }
 const aaDcc = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  systemHooks: systemHooks$h
+  systemHooks: systemHooks$m
 }, Symbol.toStringTag, { value: "Module" }));
-function systemHooks$g() {
+function systemHooks$l() {
   Hooks.on("createChatMessage", async (msg) => {
     if (msg.user.id !== game.user.id) {
       return;
     }
-    const actionId = msg.getFlag("pf1", "metadata")?.action;
-    const chatName = $(msg.content).find(".item-name")?.text() ?? "";
-    const itemFromChat = msg.itemSource;
-    if (!itemFromChat) {
+    if (msg.speaker?.scene !== game.scenes.current?.id) {
       return;
     }
-    const item2 = itemFromChat.toObject();
-    if (item2 && actionId) {
-      item2.actions?.get(actionId)?.name ?? "";
-      item2.name = `${item2.name} ${actionName}`;
-    } else if (item2 && chatName && chatName.includes(item2.name)) {
-      item2.name = chatName;
+    const data2 = {
+      actor: msg.itemSource?.actor,
+      actorId: msg.speaker?.actor,
+      ammoId: msg.flags.pf1?.metadata?.rolls?.attacks?.map((attack2) => attack2.ammo?.id)[0],
+      itemId: msg.flags.pf1?.metadata?.item,
+      item: msg.itemSource,
+      targetIds: msg.flags.pf1?.metadata?.targets,
+      templateDataId: msg.flags.pf1?.metadata?.template,
+      tokenId: msg.speaker?.token,
+      workflow: msg
+    };
+    let compiledData = await getRequiredData(data2);
+    const item2 = compiledData.item;
+    if (!item2) {
+      return;
     }
-    const tokenId = msg.speaker?.token;
-    const actorId = msg.speaker?.actor;
-    runPF1({ item: item2, tokenId, actorId, workflow: msg });
+    const actionId = msg.flags.pf1?.metadata?.action;
+    if (item2 && actionId) {
+      const actionName = item2.actions?.get(actionId)?.name ?? "";
+      if (actionName) {
+        compiledData.overrideNames.push(actionName);
+      }
+    }
+    if (item2 instanceof pf1.documents.item.ItemWeaponPF || item2 instanceof pf1.documents.item.ItemAttackPF) {
+      compiledData.extraNames.push(...item2.system.baseTypes || []);
+      const groupsOnItem = [
+        ...(item2.system.weaponGroups?.value || []).map((key) => pf1.config.weaponGroups[key]),
+        ...(item2.system.weaponGroups?.custom || "").split(";")
+      ].filter((x) => !!x);
+      compiledData.extraNames.push(...groupsOnItem);
+    }
+    runPF1(compiledData);
   });
 }
-async function runPF1(input2) {
-  const requiredData = await getRequiredData(input2);
-  if (!requiredData.item) {
-    return;
-  }
+async function runPF1(requiredData) {
   const handler = await AAHandler.make(requiredData);
   trafficCop$1(handler);
 }
 const aaPf1 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  systemHooks: systemHooks$g
+  systemHooks: systemHooks$l
 }, Symbol.toStringTag, { value: "Module" }));
-function systemHooks$f() {
+function systemHooks$k() {
+  const queue = [];
   Hooks.on("createChatMessage", async (msg) => {
     if (msg.user.id !== game.user.id) {
       return;
     }
     const item2 = await fromUuid(msg.flags?.a5e?.itemId);
+    let templateData = [];
+    while (queue.length && queue[0][0] === item2.uuid)
+      templateData.push(queue.shift()[1]);
+    if (templateData.length) {
+      templateData.forEach((data2) => runA5e$1(data2));
+      return;
+    }
     const compiledData = await getRequiredData({
       item: item2,
       itemUuid: msg.flags?.a5e?.itemId,
@@ -95268,29 +95275,35 @@ function systemHooks$f() {
       tokenId: msg.speaker?.token,
       workflow: msg
     });
-    runA5e$2(compiledData);
+    runA5e$1(compiledData);
   });
-  Hooks.on("a5e.templateCreated", async (item2, templateData, userId) => {
+  Hooks.on("a5e.measuredTemplatePlaced", async (item2, templateData, userId) => {
     if (userId !== game.user.id)
+      return;
+    if (templateData.length)
+      templateData = templateData[0];
+    else
       return;
     const compiledData = await getRequiredData({
       item: item2,
-      templateData: templateData?.[0],
-      workflow: templateData?.[0],
+      templateData,
+      workflow: templateData,
       isTemplate: true
     });
-    runA5e$2(compiledData);
+    queue.push([item2.uuid, compiledData]);
   });
 }
-async function runA5e$2(input2) {
-  const handler = await AAHandler.make(input2);
+async function runA5e$1(input) {
+  const handler = await AAHandler.make(input);
+  if (!handler?.item || !handler?.sourceToken)
+    return;
   trafficCop$1(handler);
 }
 const aaA5e = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  systemHooks: systemHooks$f
+  systemHooks: systemHooks$k
 }, Symbol.toStringTag, { value: "Module" }));
-function systemHooks$e() {
+function systemHooks$j() {
   Hooks.on("createChatMessage", async (msg) => {
     if (msg.user.id !== game.user.id) {
       return;
@@ -95304,18 +95317,18 @@ function systemHooks$e() {
     if (!compiledData.item) {
       return;
     }
-    runA5e$1(compiledData);
+    runA5e(compiledData);
   });
 }
-async function runA5e$1(input2) {
-  const handler = await AAHandler.make(input2);
+async function runA5e(input) {
+  const handler = await AAHandler.make(input);
   trafficCop$1(handler);
 }
 const aaForbiddenLands = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  systemHooks: systemHooks$e
+  systemHooks: systemHooks$j
 }, Symbol.toStringTag, { value: "Module" }));
-function systemHooks$d() {
+function systemHooks$i() {
   Hooks.on("ffgDiceMessage", async (roll) => {
     let compiledData = await getRequiredData({
       item: roll.data,
@@ -95327,15 +95340,15 @@ function systemHooks$d() {
     runStarwarsffg(compiledData);
   });
 }
-async function runStarwarsffg(input2) {
-  const handler = await AAHandler.make(input2);
+async function runStarwarsffg(input) {
+  const handler = await AAHandler.make(input);
   trafficCop$1(handler);
 }
 const aaStarwarsffg = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  systemHooks: systemHooks$d
+  systemHooks: systemHooks$i
 }, Symbol.toStringTag, { value: "Module" }));
-function systemHooks$c() {
+function systemHooks$h() {
   Hooks.on("createChatMessage", async (msg) => {
     if (msg.user.id !== game.user.id) {
       return;
@@ -95349,8 +95362,8 @@ function systemHooks$c() {
     runOse(compiledData);
   });
 }
-async function runOse(input2) {
-  const handler = await AAHandler.make(input2);
+async function runOse(input) {
+  const handler = await AAHandler.make(input);
   if (!handler?.item) {
     return;
   }
@@ -95358,9 +95371,9 @@ async function runOse(input2) {
 }
 const aaOse = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  systemHooks: systemHooks$c
+  systemHooks: systemHooks$h
 }, Symbol.toStringTag, { value: "Module" }));
-function systemHooks$b() {
+function systemHooks$g() {
   Hooks.on("createChatMessage", async (msg) => {
     if (msg.user.id !== game.user.id) {
       return;
@@ -95385,15 +95398,15 @@ function systemHooks$b() {
     runD35E(compiledData);
   });
 }
-async function runD35E(input2) {
-  const handler = await AAHandler.make(input2);
+async function runD35E(input) {
+  const handler = await AAHandler.make(input);
   trafficCop$1(handler);
 }
 const aaD35E = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  systemHooks: systemHooks$b
+  systemHooks: systemHooks$g
 }, Symbol.toStringTag, { value: "Module" }));
-function systemHooks$a() {
+function systemHooks$f() {
   Hooks.on("createChatMessage", async (msg) => {
     if (msg.user.id !== game.user.id) {
       return;
@@ -95407,35 +95420,37 @@ function systemHooks$a() {
     runCypherSystem(compiledData);
   });
 }
-async function runCypherSystem(input2) {
-  if (input2.itemId == "recovery-roll") {
+async function runCypherSystem(input) {
+  if (input.itemId == "recovery-roll") {
     if (game.settings.get("autoanimations", "EnableOnRecoveryRoll")) {
-      new Sequence().effect().file(game.settings.get("autoanimations", "RecoveryRollAnimation")).atLocation(input2.token).play();
+      new Sequence().effect().file(game.settings.get("autoanimations", "RecoveryRollAnimation")).atLocation(input.token).play();
     }
   } else {
-    const flagdata = input2.workflow?.flags?.data;
-    var diceRoll = flagdata?.roll?.total || 10;
-    if (game.settings.get("autoanimations", "EnableCritical") && diceRoll >= 19) {
-      new Sequence().effect().file(game.settings.get("autoanimations", "CriticalAnimation")).atLocation(input2.token).play();
-    } else if (game.settings.get("autoanimations", "EnableFumble") && diceRoll <= flagdata.gmiRange) {
-      new Sequence().effect().file(game.settings.get("autoanimations", "FumbleAnimation")).atLocation(input2.token).play();
-    } else if (flagdata.pool == "Might" && game.settings.get("autoanimations", "EnableOnMightRoll")) {
-      new Sequence().effect().file(game.settings.get("autoanimations", "MightRollAnimation")).atLocation(input2.token).play();
-    } else if (flagdata.pool == "Speed" && game.settings.get("autoanimations", "EnableOnSpeedRoll")) {
-      new Sequence().effect().file(game.settings.get("autoanimations", "SpeedRollAnimation")).atLocation(input2.token).play();
-    } else if (flagdata.pool == "Intellect" && game.settings.get("autoanimations", "EnableOnIntellecRoll")) {
-      new Sequence().effect().file(game.settings.get("autoanimations", "IntellectRollAnimation")).atLocation(input2.token).play();
+    const flagdata = input.workflow?.flags?.data;
+    const diceRoll = flagdata?.roll?.total;
+    if (diceRoll) {
+      if (game.settings.get("autoanimations", "EnableCritical") && diceRoll >= 19) {
+        new Sequence().effect().file(game.settings.get("autoanimations", "CriticalAnimation")).atLocation(input.token).play();
+      } else if (game.settings.get("autoanimations", "EnableFumble") && diceRoll <= flagdata.gmiRange) {
+        new Sequence().effect().file(game.settings.get("autoanimations", "FumbleAnimation")).atLocation(input.token).play();
+      } else if (flagdata.pool == "Might" && game.settings.get("autoanimations", "EnableOnMightRoll")) {
+        new Sequence().effect().file(game.settings.get("autoanimations", "MightRollAnimation")).atLocation(input.token).play();
+      } else if (flagdata.pool == "Speed" && game.settings.get("autoanimations", "EnableOnSpeedRoll")) {
+        new Sequence().effect().file(game.settings.get("autoanimations", "SpeedRollAnimation")).atLocation(input.token).play();
+      } else if (flagdata.pool == "Intellect" && game.settings.get("autoanimations", "EnableOnIntellecRoll")) {
+        new Sequence().effect().file(game.settings.get("autoanimations", "IntellectRollAnimation")).atLocation(input.token).play();
+      }
     }
-    if (input2.item) {
-      trafficCop$1(await AAHandler.make(input2));
+    if (input.item) {
+      trafficCop$1(await AAHandler.make(input));
     }
   }
 }
 const aaCyphersystem = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  systemHooks: systemHooks$a
+  systemHooks: systemHooks$f
 }, Symbol.toStringTag, { value: "Module" }));
-function systemHooks$9() {
+function systemHooks$e() {
   Hooks.on("createChatMessage", async (msg) => {
     if (msg.user.id !== game.user.id) {
       return;
@@ -95460,15 +95475,15 @@ function systemHooks$9() {
     runAlienRPG(compiledData);
   });
 }
-async function runAlienRPG(input2) {
-  const handler = await AAHandler.make(input2);
+async function runAlienRPG(input) {
+  const handler = await AAHandler.make(input);
   trafficCop$1(handler);
 }
 const aaAlienrpg = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  systemHooks: systemHooks$9
+  systemHooks: systemHooks$e
 }, Symbol.toStringTag, { value: "Module" }));
-function systemHooks$8() {
+function systemHooks$d() {
   Hooks.on("createChatMessage", async (msg) => {
     checkChatMessage$2(msg);
   });
@@ -95538,16 +95553,16 @@ function checkAmmo(data2) {
 }
 function extactData(msg) {
   let findItemId = $(msg.content).find(`[data-item-id]`);
-  let itemId = findItemId?.[0]?.attributes?.["data-item-id"]?.value;
+  let itemId2 = findItemId?.[0]?.attributes?.["data-item-id"]?.value;
   let findTokenId = $(msg.content).find(`[data-token-id]`);
   let tokenId = findTokenId?.[0]?.attributes?.["data-token-id"]?.value;
   let findActorId = $(msg.content).find(`[data-actor-id]`);
-  let actorId = findActorId?.[0]?.attributes?.["data-actor-id"]?.value;
+  let actorId2 = findActorId?.[0]?.attributes?.["data-actor-id"]?.value;
   let findAttackRoll = $(msg.content).find(
     `span.clickable[data-action='toggleVisibility']`
   );
   let attackRoll = parseInt(findAttackRoll?.[0]?.innerHTML ?? 999);
-  return { itemId, tokenId, actorId, attackRoll };
+  return { itemId: itemId2, tokenId, actorId: actorId2, attackRoll };
 }
 function getDistance(token, target2) {
   if (token.document)
@@ -95561,16 +95576,23 @@ function getDistance(token, target2) {
   return Math.round(Math.sqrt(a * a + b * b));
 }
 async function getDV(dvTable, dist) {
-  let pack = game.packs.get("cyberpunk-red-core.dv-tables");
-  if (!pack) {
-    pack = game.packs.get("cyberpunk-red-core.dvTables");
+  let table = await game.tables.getName(dvTable);
+  if (!table) {
+    const compendium = game.settings.get(
+      game.system.id,
+      "dvRollTableCompendium"
+    );
+    const pack = game.packs.get(compendium) || // what is configured in the system
+    game.packs.get("cyberpunk-red-core.internal_dv-tables") || // 0.88.X and up
+    game.packs.get("cyberpunk-red-core.dv-tables") || // 0.87.X
+    game.packs.get("cyberpunk-red-core.dvTables");
+    const tableId2 = pack.index.getName(dvTable)?._id;
+    if (!tableId2) {
+      debug$1(`Could not get table with name "${dvTable}" from compendium`);
+      return -100;
+    }
+    table = await pack.getDocument(tableId2);
   }
-  const tableId = pack.index.getName(dvTable)?._id;
-  if (!tableId) {
-    debug$1(`Could not get table with name "${dvTable}" from compendium`);
-    return -100;
-  }
-  const table = await pack.getDocument(tableId);
   if (!table) {
     debug$1(
       `Could not get table with id "${tableId}" and name "${dvTable}" from compendium`
@@ -95603,9 +95625,9 @@ async function isHit(data2) {
 }
 const aaCyberpunkred = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  systemHooks: systemHooks$8
+  systemHooks: systemHooks$d
 }, Symbol.toStringTag, { value: "Module" }));
-function systemHooks$7() {
+function systemHooks$c() {
   Hooks.on("createChatMessage", async (msg) => {
     checkMessage(msg);
   });
@@ -95632,6 +95654,9 @@ async function checkMessage(msg) {
   if (!attackSkillEnabled && !damageEnabled && !spellEnabled) {
     return null;
   }
+  if (compiledData.attackSkill && attackSkillEnabled) {
+    compiledData.extraNames.push(compiledData.attackSkill);
+  }
   if (compiledData.attackSkill && attackSkillEnabled)
     ;
   else if (compiledData.spell && spellEnabled) {
@@ -95647,9 +95672,9 @@ async function checkMessage(msg) {
 }
 const aaTheWitcherTRPG = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  systemHooks: systemHooks$7
+  systemHooks: systemHooks$c
 }, Symbol.toStringTag, { value: "Module" }));
-function systemHooks$6() {
+function systemHooks$b() {
   Hooks.on("createChatMessage", async (msg) => {
     if (msg.user.id !== game.user.id) {
       return;
@@ -95662,18 +95687,18 @@ function systemHooks$6() {
     routeMessage$1({ itemUuid, tokenUuid, actorUuid, workflow: msg, rollClass });
   });
 }
-async function routeMessage$1(input2) {
-  const requiredData = await getRequiredData(input2);
+async function routeMessage$1(input) {
+  const requiredData = await getRequiredData(input);
   if (!requiredData.item) {
     return;
   }
   const hasDamage = requiredData.item.system?.damage ? true : false;
   const playtrigger = game.settings.get("autoanimations", "playtrigger");
-  if (!hasDamage || playtrigger === "onAttack" && input2.rollClass !== "Damage") {
+  if (!hasDamage || playtrigger === "onAttack" && input.rollClass !== "Damage") {
     runTwoDSix(requiredData);
     return;
   }
-  if (hasDamage && input2.rollClass === "Damage" && playtrigger === "onDamage") {
+  if (hasDamage && input.rollClass === "Damage" && playtrigger === "onDamage") {
     runTwoDSix(requiredData);
     return;
   }
@@ -95684,9 +95709,9 @@ async function runTwoDSix(data2) {
 }
 const aaTwodsix = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  systemHooks: systemHooks$6
+  systemHooks: systemHooks$b
 }, Symbol.toStringTag, { value: "Module" }));
-function systemHooks$5() {
+function systemHooks$a() {
   Hooks.on("createChatMessage", async (msg) => {
     if (msg.user.id !== game.user.id || !AnimationState.enabled) {
       return;
@@ -95695,32 +95720,32 @@ function systemHooks$5() {
       return;
     }
     let tokenId = "";
-    let actorId = "";
+    let actorId2 = "";
     if (msg.getFlag("od6s", "vehicle") && msg.getFlag("od6s", "vehicle") !== "") {
       const document2 = await fromUuid(msg.getFlag("od6s", "vehicle"));
       if (document2.documentName === "Token") {
         tokenId = document2.id;
         const actor = game.scenes.viewed.tokens.filter((t) => t.id === document2.id)[0].actor;
-        actorId = actor.id;
+        actorId2 = actor.id;
       } else {
         tokenId = msg.speaker?.token;
-        actorId = msg.speaker?.actor;
+        actorId2 = msg.speaker?.actor;
       }
     } else {
       tokenId = msg.speaker?.token === null ? "" : msg.speaker?.token;
-      actorId = msg.speaker?.actor;
+      actorId2 = msg.speaker?.actor;
     }
     let compiledData = await getRequiredData({
       itemId: msg.flags?.od6s?.itemId,
-      actorId,
+      actorId: actorId2,
       tokenId,
       workflow: msg
     });
     runOd6s(compiledData);
   });
 }
-async function runOd6s(input2) {
-  const handler = await AAHandler.make(input2);
+async function runOd6s(input) {
+  const handler = await AAHandler.make(input);
   if (!handler) {
     return;
   }
@@ -95728,9 +95753,9 @@ async function runOd6s(input2) {
 }
 const aaOd6s = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  systemHooks: systemHooks$5
+  systemHooks: systemHooks$a
 }, Symbol.toStringTag, { value: "Module" }));
-function systemHooks$4() {
+function systemHooks$9() {
   Hooks.on("createChatMessage", async (msg) => {
     checkChatMessage$1(msg);
   });
@@ -95761,44 +95786,44 @@ async function checkChatMessage$1(msg) {
 }
 function funkyTest(msg) {
   let filterItemId = $(msg.content).filter(`[data-item-id]`);
-  let itemId = filterItemId?.[0]?.attributes?.["data-item-id"]?.value || filterItemId?.prevObject?.[0]?.attributes?.["data-item-id"]?.value;
-  if (!itemId) {
+  let itemId2 = filterItemId?.[0]?.attributes?.["data-item-id"]?.value || filterItemId?.prevObject?.[0]?.attributes?.["data-item-id"]?.value;
+  if (!itemId2) {
     const systemId = game.system.id;
     let flags = msg.flags;
-    itemId = flags.itemId ?? flags.ItemId ?? flags[systemId]?.itemId ?? flags[systemId]?.ItemId ?? msg.rolls?.[0]?.options?.itemId;
+    itemId2 = flags.itemId ?? flags.ItemId ?? flags[systemId]?.itemId ?? flags[systemId]?.ItemId ?? msg.rolls?.[0]?.options?.itemId;
   }
   let filterTokenId = $(msg.content).filter(`[data-token-id]`);
   let tokenId = filterTokenId?.[0]?.attributes?.["data-token-id"]?.value || filterTokenId?.prevObject?.[0]?.attributes?.["data-token-id"]?.value;
   let filterActorId = $(msg.content).filter(`[data-actor-id]`);
-  let actorId = filterActorId?.[0]?.attributes?.["data-actor-id"]?.value || filterActorId?.prevObject?.[0]?.attributes?.["data-actor-id"]?.value;
-  return { itemId, tokenId, actorId };
+  let actorId2 = filterActorId?.[0]?.attributes?.["data-actor-id"]?.value || filterActorId?.prevObject?.[0]?.attributes?.["data-actor-id"]?.value;
+  return { itemId: itemId2, tokenId, actorId: actorId2 };
 }
 const aaChatmessage = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  systemHooks: systemHooks$4
+  systemHooks: systemHooks$9
 }, Symbol.toStringTag, { value: "Module" }));
-function systemHooks$3() {
+function systemHooks$8() {
   Hooks.on("createChatMessage", async (msg) => {
     if (msg.user.id !== game.user.id) {
       return;
     }
     const flags = msg.flags?.["dark-heresy"] ?? {};
-    const itemId = flags.rollData.itemId;
+    const itemId2 = flags.rollData.itemId;
     const tokenId = flags.rollData.tokenId;
-    const actorId = flags.rollData.ownerId;
+    const actorId2 = flags.rollData.ownerId;
     const rollClass = flags.rollData.rollObject.class;
-    routeMessage({ itemId, tokenId, actorId, workflow: msg, rollClass });
+    routeMessage({ itemId: itemId2, tokenId, actorId: actorId2, workflow: msg, rollClass });
   });
   Hooks.on("AutomatedAnimations-WorkflowStart", onWorkflowStart);
   Hooks.on("createMeasuredTemplate", async (template, data2, userId) => {
     if (userId !== game.user.id) {
       return;
     }
-    templateAnimation(await getRequiredData({ itemUuid: template.flags?.["dark-heresy"]?.origin, templateData: template, workflow: template, isTemplate: true }));
+    templateAnimation$2(await getRequiredData({ itemUuid: template.flags?.["dark-heresy"]?.origin, templateData: template, workflow: template, isTemplate: true }));
   });
 }
-async function routeMessage(input2) {
-  const requiredData = await getRequiredData(input2);
+async function routeMessage(input) {
+  const requiredData = await getRequiredData(input);
   if (!requiredData.item) {
     return;
   }
@@ -95813,18 +95838,18 @@ function onWorkflowStart(clonedData, animationData) {
     animationData.primary.options.repeat = 1 + clonedData.workflow.flags["dark-heresy"].rollData.maxAdditionalHit;
   }
 }
-async function templateAnimation(input2) {
-  if (!input2.item) {
+async function templateAnimation$2(input) {
+  if (!input.item) {
     return;
   }
-  const handler = await AAHandler.make(input2);
+  const handler = await AAHandler.make(input);
   trafficCop$1(handler);
 }
 const aaDarkheresy = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  systemHooks: systemHooks$3
+  systemHooks: systemHooks$8
 }, Symbol.toStringTag, { value: "Module" }));
-function systemHooks$2() {
+function systemHooks$7() {
   Hooks.on("createChatMessage", async (msg) => {
     checkChatMessage(msg);
   });
@@ -95850,19 +95875,19 @@ async function checkChatMessage(msg) {
   if (!compiledData) {
     return;
   }
-  if (await tryAnnimationWith(compiledData)) {
+  if (await tryAnnimationWith$1(compiledData)) {
     return;
   }
   switch (test.type) {
     case TEST.Spell:
       const category = compiledData.item?.system?.category;
-      if (category && await tryAnnimationWith(compiledData, category)) {
+      if (category && await tryAnnimationWith$1(compiledData, category)) {
         return;
       }
       break;
   }
   const skill = compiledData.item?.getActionSkill();
-  if (skill && await tryAnnimationWith(compiledData, skill)) {
+  if (skill && await tryAnnimationWith$1(compiledData, skill)) {
     return;
   }
 }
@@ -95906,7 +95931,7 @@ async function computeCompiledData(msg, test) {
   }
   return compiledData;
 }
-async function tryAnnimationWith(compiledData, itemNameOverride) {
+async function tryAnnimationWith$1(compiledData, itemNameOverride) {
   if (itemNameOverride) {
     compiledData.item = {
       name: itemNameOverride
@@ -95921,9 +95946,9 @@ async function tryAnnimationWith(compiledData, itemNameOverride) {
 }
 const aaShadowrun5e = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  systemHooks: systemHooks$2
+  systemHooks: systemHooks$7
 }, Symbol.toStringTag, { value: "Module" }));
-function systemHooks$1() {
+function systemHooks$6() {
   Hooks.on("ds4.rollItem", async (data2) => {
     let compiledData = await getRequiredData({
       itemId: data2.id,
@@ -95933,8 +95958,8 @@ function systemHooks$1() {
     runDs4(compiledData);
   });
 }
-async function runDs4(input2) {
-  const handler = await AAHandler.make(input2);
+async function runDs4(input) {
+  const handler = await AAHandler.make(input);
   if (!handler) {
     return;
   }
@@ -95942,30 +95967,440 @@ async function runDs4(input2) {
 }
 const aaDs4 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  systemHooks: systemHooks$1
+  systemHooks: systemHooks$6
 }, Symbol.toStringTag, { value: "Module" }));
-function systemHooks() {
-  Hooks.on("createChatMessage", async (msg) => {
-    if (msg.user.id !== game.user.id || !AnimationState.enabled) {
+function systemHooks$5() {
+  Hooks.on("createMeasuredTemplate", async (template, data2, userId) => {
+    if (userId !== game.user.id) {
       return;
     }
-    let compiledData = await getRequiredData({
-      item: msg.flags?.item,
-      actorId: msg.speaker?.actor,
-      tokenId: msg.speaker?.token,
-      workflow: msg
+    const item2 = template.flags?.dnd4e?.item;
+    item2.hasAreaTarget = true;
+    const shouldPlay = shouldPlayAnimation(item2, "template");
+    if (!shouldPlay) {
+      return;
+    }
+    const reqData = await getRequiredData({
+      item: item2,
+      templateData: template,
+      workflow: template,
+      isTemplate: true
     });
-    runA5e(compiledData);
+    templateAnimation$1(reqData);
+  });
+  Hooks.on("dnd4e.rollAttack", async (item2, targetData, speakerData) => {
+    const shouldPlay = shouldPlayAnimation(item2, "attack");
+    if (!shouldPlay) {
+      return;
+    }
+    handleAnimation(
+      item2,
+      speakerData,
+      targetData.targets,
+      targetData.targetHit
+    );
+  });
+  Hooks.on("dnd4e.rollDamage", async (item2, speakerData) => {
+    const shouldPlay = shouldPlayAnimation(item2, "damage");
+    if (!shouldPlay) {
+      return;
+    }
+    const targets2 = Array.from(game.user.targets);
+    handleAnimation(item2, speakerData, targets2);
+  });
+  Hooks.on("dnd4e.rollHealing", async (item2, speakerData) => {
+    const shouldPlay = shouldPlayAnimation(item2, "healing");
+    if (!shouldPlay) {
+      return;
+    }
+    const targets2 = Array.from(game.user.targets);
+    handleAnimation(item2, speakerData, targets2);
+  });
+  Hooks.on("dnd4e.usePower", async (item2, speakerData) => {
+    const shouldPlay = shouldPlayAnimation(item2, "usePower");
+    if (!shouldPlay) {
+      return;
+    }
+    const targets2 = Array.from(game.user.targets);
+    handleAnimation(item2, speakerData, targets2);
   });
 }
-async function runA5e(input2) {
-  const handler = await AAHandler.make(input2);
+function shouldPlayAnimation(item2, hookName) {
+  const itemData = item2.system ? item2.system : item2;
+  const aaHookToUse = itemData.macro?.autoanimationHook ? itemData.macro.autoanimationHook : false;
+  console.log(`should play animation for hook ${hookName}?`);
+  if (!aaHookToUse) {
+    const defaultHook = getItemDefault(itemData);
+    console.log(`using default hook: ${defaultHook}`);
+    return defaultHook === hookName;
+  } else {
+    console.log("has aa hook explicitly set");
+    return aaHookToUse === hookName;
+  }
+}
+function hasAreaTarget(itemData) {
+  return [
+    "closeBurst",
+    "closeBlast",
+    "rangeBurst",
+    "rangeBlast",
+    "wall"
+  ].includes(itemData.rangeType);
+}
+function getItemDefault(itemData) {
+  if (hasAreaTarget(itemData)) {
+    return "template";
+  } else if (itemData.attack?.isAttack) {
+    return "attack";
+  } else if (itemData.hit?.isDamage) {
+    return "damage";
+  } else if (itemData.hit?.isHealing) {
+    return "healing";
+  } else {
+    return "usePower";
+  }
+}
+async function handleAnimation(item2, speakerData, targets2, hitTargets2 = []) {
+  const token = game.scenes.get(speakerData.scene).tokens.get(speakerData.token);
+  const workflowData = {
+    item: item2,
+    token,
+    actor: null,
+    targets: targets2,
+    workflow: item2
+  };
+  if (hitTargets2.length) {
+    workflowData.hitTargets = hitTargets2;
+  }
+  const handler = await AAHandler.make(workflowData);
+  if (!handler?.item || !handler?.sourceToken) {
+    debug$1("Automated Animations: No Item or Source Token", handler);
+    return;
+  }
+  trafficCop$1(handler);
+}
+async function templateAnimation$1(input) {
+  debug$1("Template placed, checking for animations");
+  if (!input.item) {
+    debug$1("No Item could be found");
+    return;
+  }
+  const handler = await AAHandler.make(input);
+  trafficCop$1(handler);
+}
+const aaDnd4e = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+  __proto__: null,
+  systemHooks: systemHooks$5
+}, Symbol.toStringTag, { value: "Module" }));
+function systemHooks$4() {
+  Hooks.on("createChatMessage", async (msg) => {
+    if (msg.flags.criticaled) {
+      let critAnim = game.settings.get("autoanimations", "CriticalAnimation");
+      new Sequence({ moduleName: "Automated Animations", softFail: !game.settings.get("autoanimations", "debug") }).effect().file(critAnim).atLocation(canvas.tokens.get(msg.flags.targetLoc)).scaleToObject(2).play();
+    }
+    if (msg.flags.fumbled) {
+      let critMissAnim = game.settings.get("autoanimations", "CriticalMissAnimation");
+      new Sequence({ moduleName: "Automated Animations", softFail: !game.settings.get("autoanimations", "debug") }).effect().file(critMissAnim).atLocation(canvas.tokens.get(msg.speaker.token)).scaleToObject(2).play();
+    }
+    if (msg.flags.item) {
+      useItem(await getRequiredData({ item: msg.flags.item, actor: msg.flags.actor, workflow: msg.flags.item }));
+    } else if (msg.flags.action) {
+      useItem(await getRequiredData({ item: msg.flags.action, actor: msg.flags.actor, workflow: msg.flags.action }));
+    }
+  });
+}
+async function useItem(input) {
+  debug$1("Item used, checking for animations");
+  const handler = await AAHandler.make(input);
+  if (!handler?.item || !handler?.sourceToken) {
+    console.log("Automated Animations: No Item or Source Token", handler);
+    return;
+  }
+  trafficCop$1(handler);
+}
+const aaArs = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+  __proto__: null,
+  systemHooks: systemHooks$4
+}, Symbol.toStringTag, { value: "Module" }));
+function systemHooks$3() {
+  Hooks.on("chatOutput", async (data2) => {
+    let compiledData = await getRequiredData({
+      itemId,
+      actorId,
+      workflow: data2
+    });
+    runEd4(compiledData);
+  });
+}
+async function runEd4(input) {
+  const handler = await AAHandler.make(input);
   if (!handler) {
     return;
   }
   trafficCop$1(handler);
 }
-const aaFabulaultima = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+const aaEd4e = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+  __proto__: null,
+  systemHooks: systemHooks$3
+}, Symbol.toStringTag, { value: "Module" }));
+function systemHooks$2() {
+  Hooks.on("createChatMessage", async (msg) => {
+    if (msg.user.id !== game.user.id) {
+      return;
+    }
+    const playOnDmg = game.settings.get("autoanimations", "playonDamageCore");
+    let compiledData = await getRequiredData({
+      item: await fromUuid(msg.flags.ptu?.origin?.uuid),
+      itemId: msg.flags.ptu?.origin?.uuid,
+      token: msg.token?.object,
+      tokenId: msg.speaker?.token,
+      actorId: msg.speaker?.actor,
+      workflow: msg,
+      playOnDamage: playOnDmg,
+      bypassTemplates: true
+    });
+    if (!compiledData.item) {
+      debug$1("PTU | No Item Found, exiting main Workflow");
+      return;
+    }
+    compiledData.hitTargets = checkOutcome(compiledData);
+    runPtu(compiledData);
+  });
+  Hooks.on("createMeasuredTemplate", async (template, data2, userId) => {
+    if (userId !== game.user.id) {
+      return;
+    }
+    let compiledData = await getRequiredData({
+      itemUuid: template.flags?.ptu?.origin?.uuid,
+      templateData: template,
+      workflow: template,
+      isTemplate: true
+    });
+    if (template.item)
+      compiledData.item = template.item;
+    templateAnimation(compiledData);
+  });
+}
+async function templateAnimation(input) {
+  debug$1("Template placed, checking for animations");
+  if (!input.item) {
+    debug$1("PTU | No Item could be found");
+    return;
+  }
+  if (isNewerVersion(game.system.version, "5")) {
+    if (input.item.isVariant) {
+      input.isVariant = true;
+      input.originalItem = input.item.original;
+    }
+  } else {
+    const templateName = input.templateData.flags?.ptu?.origin?.name;
+    if (templateName && input.item.name !== templateName) {
+      const overlayId = input.item.overlays.find((o) => o.name == templateName)?._id;
+      if (overlayId) {
+        input.item = input.item.loadVariant({ overlayIds: [overlayId] });
+        input.isVariant = true;
+        input.originalItem = input.item?.original;
+      }
+    }
+  }
+  const handler = await AAHandler.make(input);
+  trafficCop$1(handler);
+}
+async function runPtu(data2) {
+  const msg = data2.workflow;
+  const item2 = data2.item;
+  const playOnDamage = data2.playOnDamage;
+  const isDamageRoll = msg.isDamageRoll;
+  if (item2.type === "effect" || item2.type === "condition") {
+    debug$1("PTU | This is a Condition or Effect, exiting main workflow");
+    return;
+  }
+  if (!msg.isRoll) {
+    return;
+  }
+  if (moveHasAOE(item2)) {
+    return;
+  }
+  if (playOnDamage && isDamageRoll || !playOnDamage && !isDamageRoll) {
+    playPtu(data2);
+  }
+}
+async function playPtu(input) {
+  if (!input.item) {
+    debug$1("No Item could be found");
+    return;
+  }
+  const handler = await AAHandler.make(input);
+  trafficCop$1(handler);
+}
+function moveHasAOE(item2) {
+  return item2.system.area?.value && item2.system.area?.type;
+}
+function checkOutcome(input) {
+  let outcome = input.workflow.flags?.ptu?.context?.outcome;
+  outcome = outcome ? outcome.toLowerCase() : "";
+  let hitTargets2;
+  if (input.targets.length < 2 && !game.settings.get("autoanimations", "playonDamageCore") && outcome) {
+    if (outcome === "success" || outcome === "criticalsuccess") {
+      hitTargets2 = input.targets;
+    } else {
+      hitTargets2 = false;
+    }
+  } else {
+    hitTargets2 = input.targets;
+  }
+  return hitTargets2;
+}
+const aaPtu = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+  __proto__: null,
+  systemHooks: systemHooks$2
+}, Symbol.toStringTag, { value: "Module" }));
+function systemHooks$1() {
+  Hooks.on("createChatMessage", async (msg) => {
+    if (msg.user.id !== game.user.id)
+      return;
+    const itemData = getHandlerInputData(msg);
+    if (!itemData) {
+      return;
+    }
+    if (!itemData.itemId && !itemData.item?.id) {
+      itemData.token = game.canvas.tokens.get(msg.speaker?.token);
+    }
+    const compiledData = await getRequiredData({
+      ...itemData,
+      actorId: msg.speaker?.actor,
+      tokenId: msg.speaker?.token,
+      workflow: msg
+    });
+    const handler = await AAHandler.make(compiledData);
+    if (!handler?.item || !handler?.sourceToken)
+      return;
+    trafficCop$1(handler);
+  });
+}
+function getHandlerInputData(msg) {
+  const parser = new DOMParser();
+  const messageDocument = parser.parseFromString(msg.content, "text/html");
+  const encodedRollData = messageDocument.querySelector("[data-macro]")?.dataset["macro"];
+  if (encodedRollData) {
+    const rollData = JSON.parse(decodeURIComponent(atob(encodedRollData)));
+    switch (rollData.fn) {
+      case "prepareEncodedAttackMacro":
+      case "prepareActivationMacro":
+        const itemId3 = rollData.args[1];
+        if (!!itemId3)
+          return { itemId: itemId3 };
+        break;
+      case "prepareTechMacro":
+        const techId = rollData.args[1];
+        if (!!techId)
+          return { itemId: techId };
+        return { item: { name: "Tech Attack" } };
+      case "prepareOverheatMacro":
+        return { item: { name: "Overheat" } };
+      case "prepareStructureMacro":
+        return { item: { name: "Structure Damage" } };
+    }
+  }
+  const itemId2 = messageDocument.body.children[0]?.dataset["id"];
+  if (!!itemId2) {
+    return { itemId: itemId2 };
+  }
+  const headerText = messageDocument.querySelector(".lancer-header")?.textContent;
+  if (typeof headerText === "string" && !!headerText.length) {
+    const headerTextRinised = rinseHeader(headerText);
+    if (headerTextRinised.toLowerCase().endsWith("has stabilized")) {
+      return { item: { name: "Stabilize" } };
+    }
+    return { item: { name: headerTextRinised } };
+  }
+  const statHeaderText = messageDocument.querySelector(".lancer-stat-header")?.textContent;
+  if (typeof statHeaderText === "string" && !!statHeaderText.length) {
+    const statHeaderTextRinsed = rinseHeader(statHeaderText);
+    if (statHeaderTextRinsed.toLowerCase().endsWith("is overcharging")) {
+      return { item: { name: "Overcharge" } };
+    }
+  }
+  return false;
+}
+function rinseHeader(headerText) {
+  if (headerText.startsWith("// "))
+    headerText = headerText.slice(3);
+  if (headerText.endsWith(" //"))
+    headerText = headerText.slice(0, headerText.length - 3);
+  return headerText;
+}
+const aaLancer = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+  __proto__: null,
+  systemHooks: systemHooks$1
+}, Symbol.toStringTag, { value: "Module" }));
+function systemHooks() {
+  Hooks.on("renderChatMessage", async (msg) => {
+    let rawDataMsg = msg.getFlag("anarchy", "message-data");
+    if (!rawDataMsg) {
+      return;
+    }
+    const anarchyData = JSON.parse(msg.getFlag("anarchy", "message-data"));
+    checkChatMessageAnarchy(msg, anarchyData);
+  });
+}
+async function checkChatMessageAnarchy(msg, anarchyData) {
+  if (msg.user.id !== game.user.id || !AnimationState.enabled) {
+    return;
+  }
+  const compiledData = await computeCompiledDataAnarchy(msg, anarchyData);
+  if (!compiledData) {
+    return;
+  }
+  if (await tryAnnimationWith(compiledData)) {
+    return;
+  }
+  switch (anarchyData.attackRoll.mode) {
+    case "weapon":
+      const weaponName = anarchyData.attackRoll.weapon.id;
+      if (weaponName && await tryAnnimationWith(compiledData, weaponName)) {
+        return;
+      }
+      break;
+  }
+  const skill = anarchyData.attackRoll.skill.id;
+  if (skill && await tryAnnimationWith(compiledData, skill)) {
+    return;
+  }
+}
+async function computeCompiledDataAnarchy(msg, anarchyData) {
+  let actor = game.actors.get(anarchyData?.attackRoll?.actor?.id);
+  debug$1("Anarchy actor", actor);
+  let weaponId = anarchyData?.attackRoll?.weapon.id;
+  let item2 = {
+    id: weaponId,
+    name: actor?.items?.get(weaponId)?.name
+  };
+  debug$1("Anarchy content to  getRequiredData:", {
+    item: item2,
+    actorId: actor
+  });
+  const compiledData = await getRequiredData({
+    item: item2,
+    actorId: msg.speaker?.actor,
+    workflow: msg
+  });
+  return compiledData;
+}
+async function tryAnnimationWith(compiledData, itemNameOverride) {
+  if (itemNameOverride) {
+    compiledData.item = {
+      name: itemNameOverride
+    };
+  }
+  const handler = await AAHandler.make(compiledData);
+  if (handler?.item && handler.sourceToken) {
+    trafficCop$1(handler);
+    return true;
+  }
+  return false;
+}
+const aaShadowrunAnarchy = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
   systemHooks
 }, Symbol.toStringTag, { value: "Module" }));
@@ -95975,19 +96410,24 @@ const systemSupport = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defin
   TheWitcherTRPG: aaTheWitcherTRPG,
   a5e: aaA5e,
   alienrpg: aaAlienrpg,
+  anarchy: aaShadowrunAnarchy,
+  ars: aaArs,
   cyberpunkredcore: aaCyberpunkred,
   cyphersystem: aaCyphersystem,
   darkheresy: aaDarkheresy,
   dcc: aaDcc,
   demonlord: aaDemonlord,
+  dnd4e: aaDnd4e,
   dnd5e: aaDnd5e,
   ds4: aaDs4,
-  fabulaultima: aaFabulaultima,
+  earthdawn4e: aaEd4e,
   forbiddenlands: aaForbiddenLands,
+  lancer: aaLancer,
   od6s: aaOd6s,
   ose: aaOse,
   pf1: aaPf1,
   pf2e: aaPf2e,
+  ptu: aaPtu,
   sfrpg: aaSfrpg,
   shadowrun5e: aaShadowrun5e,
   standard: aaChatmessage,
@@ -96071,7 +96511,7 @@ Hooks.once("ready", async function() {
     storeDeletedItems(item2);
   });
   const systemIdClean = game.system.id.replace(/\-/g, "");
-  systemSupport[systemIdClean] ? systemSupport[systemIdClean].systemHooks() : systemHooks$4();
+  systemSupport[systemIdClean] ? systemSupport[systemIdClean].systemHooks() : systemHooks$9();
   registerActiveEffectHooks();
   handleTemplates();
   Hooks.callAll("aa.initialize");
